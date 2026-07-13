@@ -1,0 +1,106 @@
+# Ollama Plugin Configuration
+# This configuration file controls the behavior of the Ollama plugin
+
+# Ollama integration is opt-in. When false, no API client or listeners are started.
+enabled: false
+
+# Ollama API Settings
+api:
+  # Ollama server endpoint
+  endpoint: "http://localhost:11434"
+  
+  # Default model to use for generation
+  model: "llama3.2"
+  
+  # Request timeout in seconds
+  timeout: 30
+  
+  # Maximum retry attempts for failed requests
+  max_retries: 3
+  
+  # Whether to use streaming responses
+  stream: false
+  
+  # Default temperature for generation (0.0 - 1.0)
+  temperature: 0.7
+
+# Chat Settings
+chat:
+  # Maximum number of messages to keep in chat history
+  max_history: 10
+  
+  # Session timeout in minutes
+  session_timeout: 30
+  
+  # Whether to save chat history to disk
+  save_history: false
+
+# Logging Settings
+logging:
+  # Maximum number of log entries to keep per player
+  max_log_entries: 10
+  
+  # Types of events to log for context
+  log_types:
+    - "chat"
+    - "commands"
+    - "player_join"
+    - "player_quit"
+    - "block_break"
+    - "block_place"
+  
+  # Whether to include timestamps in logs
+  include_timestamps: true
+
+# Command Execution Settings
+commands:
+  # Whether to allow command execution via /ollama run
+  enable_execution: false
+  
+  # Commands that are allowed to be executed (empty means all)
+  allowed_commands: []
+  
+  # Commands that are explicitly blocked
+  blocked_commands:
+    - "stop"
+    - "restart"
+    - "op"
+    - "deop"
+    - "ban"
+    - "kick"
+  
+  # Whether to require confirmation for dangerous commands
+  require_confirmation: true
+
+# Performance Settings
+performance:
+  # Maximum concurrent requests
+  max_concurrent_requests: 5
+  
+  # Rate limiting: requests per minute per player
+  rate_limit: 10
+  
+  # Whether to cache responses
+  cache_responses: true
+  
+  # Cache TTL in minutes
+  cache_ttl: 60
+
+# Debug Settings
+debug:
+  # Whether debug mode is enabled
+  enabled: false
+  
+  # Whether to log all API requests/responses
+  log_requests: false
+  
+  # Whether to show detailed error messages
+  verbose_errors: false
+
+# Plugin Integration Settings
+integration:
+  # Whether to expose the API to other plugins
+  expose_api: true
+  
+  # Whether to broadcast events for other plugins
+  broadcast_events: true

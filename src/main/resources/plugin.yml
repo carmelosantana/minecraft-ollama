@@ -1,0 +1,39 @@
+name: Ollama
+main: org.xpfarm.ollama.OllamaPlugin
+version: 0.2.0
+api-version: 1.21
+author: Carmelo Santana
+description: Minecraft Paper plugin that provides an API wrapper for Ollama integration
+website: https://github.com/carmelosantana/minecraft-ollama
+
+softdepend: [ViaVersion]
+
+commands:
+  ollama:
+    description: Ollama plugin commands
+    usage: /ollama <subcommand>
+    permission: ollama.use
+    permission-message: You don't have permission to use this command
+
+permissions:
+  ollama.use:
+    description: Allow use of basic Ollama commands
+    default: true
+  ollama.admin:
+    description: Allow use of admin Ollama commands
+    default: op
+  ollama.generate:
+    description: Allow text generation
+    default: true
+  ollama.code:
+    description: Allow code generation
+    default: true
+  ollama.chat:
+    description: Allow chat interactions
+    default: true
+  ollama.run:
+    description: Allow command execution
+    default: op
+  ollama.debug:
+    description: Allow debug commands
+    default: op

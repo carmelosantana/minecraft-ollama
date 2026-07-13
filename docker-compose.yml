@@ -1,0 +1,93 @@
+# Minecraft Java Paper Server + Geyser + Floodgate + Ollama Docker Container
+# https://github.com/TheRemote/Legendary-Java-Minecraft-Geyser-Floodgate
+services:
+  minecraft:
+    image: 05jchambers/legendary-minecraft-geyser-floodgate:latest
+    restart: "unless-stopped"
+    ports:
+      - 25565:25565
+      - 19132:19132
+      - 19132:19132/udp
+    volumes:
+      - minecraft:/minecraft
+      - ./target:/plugins-temp
+    stdin_open: true # docker run -i
+    tty: true # docker run -t
+    entrypoint: ["/bin/bash", "/scripts/start.sh"]
+    environment:
+      Port: "25565"
+      BedrockPort: "19132"
+      TZ: "America/New_York"
+      MaxMemory: 4096
+      Version: "1.21.6" # Force latest Paper version
+      NoBackup: "plugins" # Optional folder to skip during backups
+      NoPermCheck: "Y" # Optional flag to skip permissions check
+      # NoViaVersion: "Y" # Enable ViaVersion for Geyser compatibility
+      QuietCurl: "Y" # Optional flag to reduce curl log output
+    depends_on:
+      - ollama
+    networks:
+      - minecraft-network
+    command: |
+      bash -c "
+        # Wait for Ollama to be ready
+        until curl -s http://ollama:11434/api/version > /dev/null 2>&1; do
+          echo 'Waiting for Ollama...'
+          sleep 2
+        done
+        
+        # Copy plugin from temp location
+        if [ -f /plugins-temp/ollama-*.jar ]; then
+          cp /plugins-temp/ollama-*.jar /minecraft/plugins/
+          echo 'Ollama plugin copied to server'
+        fi
+        
+        # Start the server
+        exec /scripts/start.sh
+      "
+
+  ollama:
+    image: ollama/ollama
+    restart: "unless-stopped"
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    networks:
+      - minecraft-network
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    command: |
+      bash -c "
+        # Start Ollama server
+        ollama serve &
+        
+        # Wait for server to be ready
+        until curl -s http://localhost:11434/api/version > /dev/null 2>&1; do
+          echo 'Waiting for Ollama server...'
+          sleep 2
+        done
+        
+        # Pull the default model
+        echo 'Pulling default model...'
+        ollama pull llama3.2
+        
+        # Keep the server running
+        wait
+      "
+
+volumes:
+  minecraft:
+    driver: local
+  ollama:
+    driver: local
+
+networks:
+  minecraft-network:
+    driver: bridge
