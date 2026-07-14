@@ -9,6 +9,14 @@
     <version>0.2.0</version>
     <packaging>jar</packaging>
 
+    <licenses>
+        <license>
+            <name>GNU Affero General Public License v3.0 or later</name>
+            <url>https://www.gnu.org/licenses/agpl-3.0.html</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
     <name>Ollama</name>
     <description>Minecraft Paper plugin that provides an API wrapper for Ollama integration</description>
     <url>https://github.com/carmelosantana/minecraft-ollama</url>
