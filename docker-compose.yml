@@ -5,9 +5,9 @@ services:
     image: 05jchambers/legendary-minecraft-geyser-floodgate:latest
     restart: "unless-stopped"
     ports:
-      - 25565:25565
-      - 19132:19132
-      - 19132:19132/udp
+      - "${XPFARM_JAVA_PORT:-25565}:${XPFARM_JAVA_PORT:-25565}"
+      - "${XPFARM_BEDROCK_PORT:-19132}:${XPFARM_BEDROCK_PORT:-19132}"
+      - "${XPFARM_BEDROCK_PORT:-19132}:${XPFARM_BEDROCK_PORT:-19132}/udp"
     volumes:
       - minecraft:/minecraft
       - ./target:/plugins-temp
@@ -15,11 +15,11 @@ services:
     tty: true # docker run -t
     entrypoint: ["/bin/bash", "/scripts/start.sh"]
     environment:
-      Port: "25565"
-      BedrockPort: "19132"
+      Port: "${XPFARM_JAVA_PORT:-25565}"
+      BedrockPort: "${XPFARM_BEDROCK_PORT:-19132}"
       TZ: "America/New_York"
       MaxMemory: 4096
-      Version: "1.21.6" # Force latest Paper version
+      Version: "26.1.2" # Paper target; image always takes the latest build
       NoBackup: "plugins" # Optional folder to skip during backups
       NoPermCheck: "Y" # Optional flag to skip permissions check
       # NoViaVersion: "Y" # Enable ViaVersion for Geyser compatibility
