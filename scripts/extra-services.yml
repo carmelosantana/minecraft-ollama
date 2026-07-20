@@ -1,0 +1,31 @@
+# Sidecar only. The old compose ALSO set a `command:` block alongside an
+# exec-form `entrypoint:`, so Docker passed the whole script as positional
+# arguments to start.sh and it NEVER RAN -- the readiness wait and the plugin
+# copy both silently did nothing. The base compose owns the entrypoint and this
+# overlay does not override it, so that cannot recur. Readiness is expressed
+# with depends_on + the healthcheck instead of a shell loop.
+#
+# Port 11434 is deliberately NOT published to the host: the old compose bound it
+# unconditionally, outside the xpfarm-slot lease, so two concurrent test stacks
+# collided on it. Only the minecraft container needs it, over the compose network.
+services:
+  ollama:
+    image: ollama/ollama
+    restart: "no"
+    volumes:
+      - ollama:/root/.ollama
+    environment:
+      OLLAMA_HOST: "0.0.0.0"
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+  minecraft:
+    depends_on:
+      ollama:
+        condition: service_healthy
+volumes:
+  ollama:
+    driver: local
