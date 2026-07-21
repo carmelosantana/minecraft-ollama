@@ -26,11 +26,11 @@ the fact to record what is *actually known*, not to reconstruct a history that d
 Accordingly:
 
 - **Gate 7a carries real evidence**, produced by the docker-rig-consolidation effort's shared test
-  rig, quoted verbatim below from `minecraft-plugin-docs/.superpowers/sdd/task-5-report.md`. That
+  rig, quoted verbatim below from `xpfarm-plugin-toolkit/.superpowers/sdd/task-5-report.md`. That
   report does not state its own date; the sibling `task-4-report.md` dates the same effort
   **2026-07-20**.
 - **Gate 7b cites a real recorded run** (the 2026-07-19 ecosystem matrix) in
-  `minecraft-plugin-docs/CURRENT_STATE.md`. It was not re-run for this backfill.
+  `xpfarm-plugin-toolkit/CURRENT_STATE.md`. It was not re-run for this backfill.
 - Everything else is either an **observed fact** (something readable in the repo or manifest today,
   with the place it was read stated) or is marked **NOT RECORDED / NOT RUN / UNKNOWN**.
 - An **observed fact is not a passed gate**. A checkbox is ticked only where a gate criterion is
@@ -48,7 +48,7 @@ this plugin has ever run.
 - [ ] Status is explicitly recorded as active, experimental, or excluded. **NOT RECORDED at the
       time.** `active` is asserted here from the plugin's presence in
       `minecraft-plugin-updater/plugins.json` and in the Active Plugin Releases table of
-      `minecraft-plugin-docs/CURRENT_STATE.md`. No scoping decision was ever written down —
+      `xpfarm-plugin-toolkit/CURRENT_STATE.md`. No scoping decision was ever written down —
       notable for a plugin that pipes player chat to an LLM and can execute server commands.
 - [ ] Purpose, commands, events, permissions, configuration, persistence, and acceptance checks are
       defined. **NOT RECORDED — predates the checklist process.** No requirements interview was
@@ -198,7 +198,7 @@ investigated**.
       here.**
 - [x] Ollama/Umami-style external endpoints are optional and failure-tolerant when applicable.
       **Evidence exists, but it is the matrix run's, not this gate's.**
-      `minecraft-plugin-docs/CURRENT_STATE.md` records that on 2026-07-19 the plugin was
+      `xpfarm-plugin-toolkit/CURRENT_STATE.md` records that on 2026-07-19 the plugin was
       deliberately pointed at TEST-NET-2 `198.51.100.9` to exercise the real failure path: "Ollama
       caught `java.net.SocketException: Network is unreachable`, retried once and stopped (bounded,
       no loop)" and "Server stayed available. No credential-shaped strings in logs." That is a real
@@ -231,9 +231,9 @@ investigated**.
 
 ### 7a — single-plugin runtime verification — PARTIAL (real evidence, narrow scope)
 
-Evidence source: **this effort's shared test rig** (`minecraft-plugin-docs/bin/xpfarm-test-stack`)
+Evidence source: **this effort's shared test rig** (`xpfarm-plugin-toolkit/bin/xpfarm-test-stack`)
 plus this repo's new `scripts/extra-services.yml` sidecar overlay, on a disposable fresh-volume
-Legendary stack, recorded verbatim in `minecraft-plugin-docs/.superpowers/sdd/task-5-report.md`.
+Legendary stack, recorded verbatim in `xpfarm-plugin-toolkit/.superpowers/sdd/task-5-report.md`.
 
 #### The old compose file never ran this plugin — two independent, confirmed defects
 
@@ -335,7 +335,7 @@ of loading the plugin.
 
 ### 7b — ten-plugin ecosystem matrix — PASSED, but recorded elsewhere and not re-run here
 
-Not run by this backfill. `minecraft-plugin-docs/CURRENT_STATE.md` records an
+Not run by this backfill. `xpfarm-plugin-toolkit/CURRENT_STATE.md` records an
 **Ecosystem Matrix Run (2026-07-19) — PASSED 11/11** on a fresh-volume Legendary stack, installing
 every plugin through the one-shot updater from published release assets. Its row for this plugin:
 
@@ -423,7 +423,7 @@ not been rehearsed in production either.
 ## 12. Handoff — PARTIAL
 
 - [ ] Current-state documentation refreshed with release, CI, updater, deployment, and local
-      pending state. **NOT DONE by this backfill** — `minecraft-plugin-docs/CURRENT_STATE.md` was
+      pending state. **NOT DONE by this backfill** — `xpfarm-plugin-toolkit/CURRENT_STATE.md` was
       deliberately left untouched. It already flags this repo as one of four carrying no gate 7a
       checklist record; that flag is now stale in this repo's favour.
 - [x] Known limitations, skipped checks, migration notes, rollback guidance, and follow-up owner
