@@ -40,11 +40,14 @@ public class OllamaAPI {
     private final OllamaHttp http;
     private final ModelCapabilities capabilities;
 
-    private String endpoint;
-    private String defaultModel;
+    // volatile: written by loadConfig() on the main thread (including under /ollama reload) and read
+    // on executor threads. Without it an in-flight async task has no happens-before guarantee of
+    // seeing a reloaded value. Matches how OllamaHttp marks its own config fields.
+    private volatile String endpoint;
+    private volatile String defaultModel;
     private int timeout;
     private int maxRetries;
-    private double defaultTemperature;
+    private volatile double defaultTemperature;
 
     public OllamaAPI(OllamaPlugin plugin) {
         this.plugin = plugin;
@@ -155,9 +158,13 @@ public class OllamaAPI {
         if (request.getModel() == null) {
             request.setModel(defaultModel);
         }
-        applyThinkGating(request.getModel(), request::setThink);
 
         CompletableFuture.runAsync(() -> {
+            // Think-gating runs here, on the executor thread, not the caller (main/server) thread:
+            // on a capability-cache miss it makes a synchronous /api/show call that can block for up
+            // to api.timeout. Doing it before dispatch would freeze the server thread -- the exact
+            // main-thread network I/O this async architecture exists to avoid.
+            applyThinkGating(request.getModel(), request::setThink);
             GenerateResponse result;
             try {
                 String json = gson.toJson(request);
@@ -227,9 +234,13 @@ public class OllamaAPI {
         if (request.getModel() == null) {
             request.setModel(defaultModel);
         }
-        applyThinkGating(request.getModel(), request::setThink);
 
         CompletableFuture.runAsync(() -> {
+            // Think-gating runs here, on the executor thread, not the caller (main/server) thread:
+            // on a capability-cache miss it makes a synchronous /api/show call that can block for up
+            // to api.timeout. Doing it before dispatch would freeze the server thread -- the exact
+            // main-thread network I/O this async architecture exists to avoid.
+            applyThinkGating(request.getModel(), request::setThink);
             ChatResponse result;
             try {
                 String json = gson.toJson(request);
