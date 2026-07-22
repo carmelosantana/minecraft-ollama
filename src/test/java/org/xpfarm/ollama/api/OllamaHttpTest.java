@@ -13,6 +13,7 @@ import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Logger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -299,32 +300,199 @@ final class OllamaHttpTest {
     }
 
     /**
-     * Player-facing text must never carry an endpoint URL, a response body, or a stack trace.
-     * Nothing but code reading pinned that property before this test existed.
+     * The property: player-facing text must never leak an endpoint URL, a response body, or a
+     * stack trace. Nothing but code reading pinned it before this test existed.
      *
-     * <p>The check is on the URL <em>scheme</em> ({@code http://}) rather than the bare substring
-     * {@code http}: four of the six messages deliberately end in {@code (HTTP 400)} and friends,
-     * and a bare status code is not a leak — it names no host, no path, and no response body. A
-     * bare-{@code http} assertion would fail against {@link StatusPolicy} as written, and the fix
-     * would have to be to strip the status codes, which is a behaviour change to a class this task
-     * is not allowed to alter. The host, path, and stack-trace assertions below cover what the
-     * property is actually about.
+     * <p>A bare uppercase HTTP status number is <strong>not</strong> a leak. {@code (HTTP 404)}
+     * names no host, no path and no response body; it is a support token that lets an operator
+     * match what a player reports in chat against a line in the server log. The status suffixes in
+     * {@link StatusPolicy} are deliberate and stay.
+     *
+     * <p>The literal, case-<em>sensitive</em> {@code contains("http")} assertion below is therefore
+     * satisfiable, and passes today against all six messages: every one of them spells the protocol
+     * {@code HTTP} in uppercase, so a lowercase {@code http} in player text could only have come
+     * from a URL. It is kept alongside the {@code http://} check because it also catches a
+     * lowercase-scheme leak with no {@code //} — {@code "http:"}, or a bare {@code http} host
+     * label — that checking only {@code http://} would miss.
+     *
+     * <p>Checked in two places: against {@link StatusPolicy#playerMessage} for every action here,
+     * and against the {@code getPlayerMessage()} of exceptions {@link OllamaHttp} actually throws
+     * in {@link #noExceptionThrownByTheTransportLeaksAnEndpointOrAStackTrace()}, so that
+     * {@code OllamaHttp} passing an internal detail string through as the player message would fail
+     * too. The detail message ({@code getMessage()}) is exempt by design: it carries the URI and
+     * the truncated response body to the <em>server log</em>, which is the entire point of keeping
+     * the two strings separate.
      */
     @Test
     void noPlayerMessageLeaksAnEndpointOrAStackTrace() {
         for (StatusPolicy.Action action : StatusPolicy.Action.values()) {
-            String message = StatusPolicy.playerMessage(action, 500);
-            String lower = message.toLowerCase(Locale.ROOT);
-            assertTrue(!lower.contains("http://") && !lower.contains("https://"),
-                    action + " player message leaks a URL scheme: " + message);
-            assertTrue(!message.contains("://"),
-                    action + " player message leaks a URL: " + message);
-            assertTrue(!message.contains("Exception"),
-                    action + " player message leaks a stack trace: " + message);
-            assertTrue(!lower.contains("localhost") && !lower.contains("127.0.0.1"),
-                    action + " player message leaks the endpoint host: " + message);
-            assertTrue(!lower.contains("/api/"),
-                    action + " player message leaks an endpoint path: " + message);
+            assertLeaksNothing(action + " player message",
+                    StatusPolicy.playerMessage(action, 500));
         }
+    }
+
+    /**
+     * The companion to {@link #noPlayerMessageLeaksAnEndpointOrAStackTrace()}: asserting on
+     * {@link StatusPolicy} alone would not catch {@link OllamaHttp} handing an internal detail
+     * string to the exception's player-message slot. Every failure path the transport can produce
+     * against a reachable server is checked here as it is actually thrown.
+     */
+    @Test
+    void noExceptionThrownByTheTransportLeaksAnEndpointOrAStackTrace() {
+        respond("/api/chat", 404,
+                "{\"error\":\"model 'nope' not found at http://127.0.0.1:11434/api/chat\"}");
+        respond("/api/show", 400, "{\"error\":\"unexpected EOF\"}");
+        http = transport(1, 5, 0);
+
+        OllamaHttpException missing =
+                assertThrows(OllamaHttpException.class, () -> http.postGated("/api/chat", "{}"));
+        assertLeaksNothing("thrown MODEL_MISSING player message", missing.getPlayerMessage());
+
+        OllamaHttpException malformed =
+                assertThrows(OllamaHttpException.class, () -> http.post("/api/show", "{}"));
+        assertLeaksNothing("thrown MALFORMED_REQUEST player message", malformed.getPlayerMessage());
+
+        // The other half of the contract: the detail string is for the server log and is expected
+        // to carry the URI. If this ever stops holding, the operator has lost their diagnostics.
+        assertTrue(missing.getMessage().contains("/api/chat"),
+                "the log detail dropped the URI: " + missing.getMessage());
+    }
+
+    /** Applies the no-leak rules to one player-facing string. */
+    private static void assertLeaksNothing(String label, String message) {
+        String lower = message.toLowerCase(Locale.ROOT);
+        assertTrue(!message.contains("http"),
+                label + " leaks a lowercase URL scheme: " + message);
+        assertTrue(!lower.contains("http://") && !lower.contains("https://"),
+                label + " leaks a URL scheme: " + message);
+        assertTrue(!message.contains("://"), label + " leaks a URL: " + message);
+        assertTrue(!message.contains("Exception"), label + " leaks a stack trace: " + message);
+        assertTrue(!lower.contains("localhost") && !lower.contains("127.0.0.1"),
+                label + " leaks the endpoint host: " + message);
+        assertTrue(!lower.contains("/api/"), label + " leaks an endpoint path: " + message);
+    }
+
+    /**
+     * {@code api.endpoint} is operator-typed and unvalidated, and both {@code URI.create} and
+     * {@code HttpRequest.Builder.uri} reject a bad one with the <em>unchecked</em>
+     * {@link IllegalArgumentException}. Unmapped, that escapes past every {@code catch
+     * (OllamaHttpException)} the plugin has; on an executor thread it is swallowed by the default
+     * handler and the player is simply never answered.
+     */
+    @Test
+    void aMalformedEndpointThrowsOllamaHttpExceptionRatherThanIllegalArgumentException() {
+        // No scheme at all, a non-HTTP scheme, and an illegal character.
+        for (String malformed : new String[] {"127.0.0.1:11434", "ftp://127.0.0.1:11434",
+                "http://127.0.0.1:11 434"}) {
+            OllamaHttp transport = new OllamaHttp(1, Logger.getAnonymousLogger());
+            try {
+                transport.configure(malformed, 5, 0);
+
+                // All three public entry points, because the throw site is shared by all of them.
+                for (org.junit.jupiter.api.function.Executable call : new
+                        org.junit.jupiter.api.function.Executable[] {
+                            () -> transport.postGated("/api/chat", "{}"),
+                            () -> transport.post("/api/show", "{}"),
+                            () -> transport.get("/api/version")}) {
+                    OllamaHttpException thrown = assertThrows(OllamaHttpException.class, call,
+                            "endpoint '" + malformed + "' escaped as an unchecked throwable");
+                    assertEquals(StatusPolicy.Action.MALFORMED_REQUEST, thrown.getAction(),
+                            "endpoint '" + malformed + "' was not reported as malformed");
+                    assertLeaksNothing("malformed-endpoint player message",
+                            thrown.getPlayerMessage());
+                }
+            } finally {
+                transport.close();
+            }
+        }
+    }
+
+    /** A malformed endpoint must not leave the concurrency gate held. */
+    @Test
+    void aMalformedEndpointStillReleasesTheGate() {
+        http = new OllamaHttp(1, Logger.getAnonymousLogger());
+        http.configure("127.0.0.1:11434", 5, 0);
+        assertThrows(OllamaHttpException.class, () -> http.postGated("/api/chat", "{}"));
+
+        respond("/api/chat", 200, "ok");
+        http.configure(endpoint, 5, 0);
+        assertEquals("ok", assertDoesNotThrowValue(() -> http.postGated("/api/chat", "{}")));
+    }
+
+    /** {@code http://host:11434/} + {@code /api/chat} would otherwise request {@code //api/chat}. */
+    @Test
+    void aTrailingSlashOnTheEndpointIsStrippedRatherThanDoublingTheSlash() throws Exception {
+        AtomicReference<String> requestedPath = new AtomicReference<>();
+        server.createContext("/", exchange -> {
+            requestedPath.set(exchange.getRequestURI().getPath());
+            byte[] bytes = "ok".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (OutputStream out = exchange.getResponseBody()) {
+                out.write(bytes);
+            }
+        });
+        http = new OllamaHttp(1, Logger.getAnonymousLogger());
+        http.configure(endpoint + "/", 5, 0);
+
+        assertEquals("ok", http.postGated("/api/chat", "{}"));
+        assertEquals("/api/chat", requestedPath.get(),
+                "a trailing slash in api.endpoint produced a doubled slash");
+    }
+
+    /**
+     * {@code api.timeout} is per attempt, so the retry budget multiplies it. At the defaults
+     * (30s, 3 retries) a persistently-503ing endpoint would hold the gate for up to 120 seconds and
+     * refuse every other player for the duration. A deadline computed once per call bounds it.
+     */
+    @Test
+    void aRepeatedlyFiveOhThreeingEndpointStopsOnTheDeadlineNotTheFullRetryBudget() {
+        AtomicInteger attempts = new AtomicInteger();
+        server.createContext("/api/chat", exchange -> {
+            attempts.incrementAndGet();
+            try {
+                Thread.sleep(900);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            exchange.sendResponseHeaders(503, -1);
+            exchange.close();
+        });
+        // A 5-retry budget would be 6 attempts and roughly 9s of wall clock, unbounded by timeout.
+        http = transport(1, 2, 5);
+
+        long started = System.nanoTime();
+        OllamaHttpException thrown =
+                assertThrows(OllamaHttpException.class, () -> http.postGated("/api/chat", "{}"));
+        long elapsedMs = (System.nanoTime() - started) / 1_000_000;
+
+        assertEquals(StatusPolicy.Action.QUEUE_FULL, thrown.getAction());
+        assertTrue(attempts.get() <= 3,
+                "the deadline did not stop the retry loop: " + attempts.get()
+                        + " attempts against a 2s deadline and 900ms-per-attempt responses");
+        assertTrue(elapsedMs < 6_000,
+                "the call held the gate for " + elapsedMs + "ms; the deadline should cap it near "
+                        + "2x api.timeout, not (max_retries + 1)x it");
+    }
+
+    /**
+     * The deadline must not quietly become the retry policy. With a generous {@code api.timeout} a
+     * 503 still spends its whole configured budget, exactly as before.
+     */
+    @Test
+    void aFiveOhThreeStillUsesTheFullBudgetWhenTheDeadlineIsGenerous() {
+        AtomicInteger attempts = new AtomicInteger();
+        server.createContext("/api/chat", exchange -> {
+            attempts.incrementAndGet();
+            exchange.sendResponseHeaders(503, -1);
+            exchange.close();
+        });
+        http = transport(1, 30, 2);
+
+        OllamaHttpException thrown =
+                assertThrows(OllamaHttpException.class, () -> http.postGated("/api/chat", "{}"));
+        assertEquals(StatusPolicy.Action.QUEUE_FULL, thrown.getAction());
+        assertEquals(3, attempts.get(),
+                "expected 1 initial attempt + the full 2-retry budget; 503 is genuine queue "
+                        + "pressure on the load path and is the one action that gets all of it");
     }
 }

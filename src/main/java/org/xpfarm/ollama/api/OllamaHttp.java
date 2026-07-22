@@ -84,12 +84,35 @@ public final class OllamaHttp {
     /**
      * The single request factory. Every path goes through here, which is what makes "the timeout
      * is always applied" a structural property rather than a convention someone can forget.
+     *
+     * <p>{@code api.endpoint} is operator-supplied text and is not validated at load time, so it
+     * can be anything. {@link URI#create} rejects a value containing a space, and
+     * {@link HttpRequest.Builder#uri} rejects one whose scheme is missing or non-HTTP
+     * ({@code localhost:11434}) — both as the <em>unchecked</em> {@link IllegalArgumentException}.
+     * Left alone that escapes every public method here as an unchecked throwable, so a caller
+     * catching only {@link OllamaHttpException} on an executor thread swallows it and the player is
+     * told nothing at all. It is translated to {@link StatusPolicy.Action#MALFORMED_REQUEST}, which
+     * is exactly what it is: a request we cannot even form.
+     *
+     * <p>A single trailing slash is stripped from the endpoint, because
+     * {@code http://host:11434/} + {@code /api/chat} is {@code //api/chat}.
      */
-    private HttpRequest.Builder newRequest(String path) {
-        return HttpRequest.newBuilder()
-                .uri(URI.create(endpoint + path))
-                .timeout(Duration.ofSeconds(timeoutSeconds))
-                .header("Accept", "application/json");
+    private HttpRequest.Builder newRequest(String path) throws OllamaHttpException {
+        String base = endpoint == null ? "" : endpoint.trim();
+        if (base.endsWith("/")) {
+            base = base.substring(0, base.length() - 1);
+        }
+        try {
+            return HttpRequest.newBuilder()
+                    .uri(URI.create(base + path))
+                    .timeout(Duration.ofSeconds(timeoutSeconds))
+                    .header("Accept", "application/json");
+        } catch (IllegalArgumentException e) {
+            throw new OllamaHttpException(StatusPolicy.Action.MALFORMED_REQUEST,
+                    StatusPolicy.playerMessage(StatusPolicy.Action.MALFORMED_REQUEST, 400),
+                    "api.endpoint is not a usable HTTP URL: '" + endpoint + "' (" + e.getMessage()
+                            + ")");
+        }
     }
 
     /** Ungated GET. Used by the {@code /api/version} connection test. */
@@ -121,14 +144,31 @@ public final class OllamaHttp {
         }
     }
 
-    private HttpRequest postRequest(String path, String jsonBody) {
+    private HttpRequest postRequest(String path, String jsonBody) throws OllamaHttpException {
         return newRequest(path)
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
                 .build();
     }
 
+    /**
+     * Sends the request, retrying within both the per-action retry budget <em>and</em> a total
+     * elapsed-time budget.
+     *
+     * <p>{@code api.timeout} is a per-attempt timeout — that is what {@link HttpRequest#timeout}
+     * means — so on its own it bounds nothing overall. At the defaults (timeout 30s,
+     * max_retries 3) a endpoint that 503s every time would spend 4 x 30s = 120 seconds inside a
+     * single {@link #postGated} call <em>while holding the concurrency gate</em>, refusing every
+     * other player for two minutes. The deadline computed here is checked before each retry, so the
+     * worst case is roughly 2x {@code api.timeout} (the last attempt may start just under the
+     * deadline and then run its own full timeout) instead of {@code (maxRetries + 1)}x it.
+     *
+     * <p>Passing the deadline is not a distinct outcome: the loop simply stops retrying and throws
+     * the failure it already has, exactly as if the retry budget had run out.
+     */
     private String execute(HttpRequest request) throws OllamaHttpException {
+        final long deadlineNanos =
+                System.nanoTime() + Duration.ofSeconds(timeoutSeconds).toNanos();
         int attempt = 0;
         while (true) {
             HttpResponse<String> response;
@@ -157,7 +197,8 @@ public final class OllamaHttp {
             }
 
             StatusPolicy.Action action = StatusPolicy.forStatus(status);
-            if (attempt < StatusPolicy.retryBudget(action, maxRetries)) {
+            if (attempt < StatusPolicy.retryBudget(action, maxRetries)
+                    && System.nanoTime() < deadlineNanos) {
                 attempt++;
                 logger.log(Level.WARNING, "Ollama returned HTTP {0}; retry {1} of {2}",
                         new Object[] {status, attempt,
