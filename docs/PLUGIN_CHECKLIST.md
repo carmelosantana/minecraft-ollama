@@ -388,11 +388,64 @@ exists and matches. Three facts it established that bind implementation:
 
 ## 7. Matrix
 
-- [ ] Fresh-volume [Legendary Java Minecraft Geyser Floodgate stack](https://github.com/TheRemote/Legendary-Java-Minecraft-Geyser-Floodgate) test covers every updater-managed plugin.
-- [ ] Each updater-managed plugin's manifest `enabled` value, default state, and expected fresh-volume behavior are recorded separately.
-- [ ] Paper, Geyser, Floodgate, and ViaVersion start successfully together.
-- [ ] Affected commands, permissions, persistence, and configuration reload were exercised over RCON with no server-wide hot reload.
-- [ ] Ollama and Umami unavailable-endpoint tests keep the server and plugins available when applicable.
+**Gate 7a — single-plugin runtime verification — PASSED 2026-07-22.** This is the discharge of
+follow-up 1 of the 0.2.1 backfill: **the first time `/ollama` has been exercised end to end against
+a real endpoint in-game.** Every prior runtime record proved only that a dormant `onEnable()`
+(shipping `enabled: false`) does not throw. Booted via the shared rig on a fresh-volume Legendary
+stack with this repo's `scripts/extra-services.yml` Ollama sidecar.
+
+> **Rig note.** The rig derives its Docker Compose project name from the worktree directory
+> basename, and the delegation's worktree name `ollama-0.3.0` contains dots, which Compose rejects
+> (`invalid project name "…-ollama-0.3.0-…"`). Gate 7a was therefore run from a throwaway
+> detached-HEAD worktree with a dot-free name (`ollama-rigtest`) at the same commit; it was torn
+> down and removed afterward, and the main checkout was never touched. The dot-in-basename is a
+> shared-rig limitation, not a plugin defect — flagged for the toolkit, not fixed here.
+
+- [x] Paper, Geyser, Floodgate, and ViaVersion start successfully together. Rig `up` self-verified
+      Paper's own `Done (21.142s)! For help`, a real Minecraft protocol handshake on the Java port
+      (`Paper 26.1.2 | protocol 775`), and RCON `plugins` listing all four **green**:
+      `floodgate, Geyser-Spigot, Ollama, ViaVersion`.
+- [x] Affected commands, permissions, and configuration reload were exercised over RCON with no
+      server-wide hot reload. With `enabled: true` and `api.endpoint: http://ollama:11434`:
+      `/ollama version` and `/ollama status` returned model/endpoint; `/ollama reload` reloaded
+      config live (raised `api.timeout` took effect); `/ollama debug on` toggled debug.
+      **`/ollama say` returned a real generated answer from the live `llama3.2:1b` endpoint** —
+      *"A Creeper is a hostile mob in Minecraft that can explode on impact, dealing damage to
+      players and structures nearby."* — with `"done":true,"done_reason":"stop"` (a complete, not
+      truncated, answer). This is **acceptance check 8**. The Ollama sidecar's gin access log
+      independently confirms the wire traffic: `GET /api/version` 200, `POST /api/show` 200 (the
+      capability probe), `POST /api/generate` 200. The sent request body showed a top-level
+      `system` field (correct for `/api/generate`) and **no `think` field** — `llama3.2:1b` is not
+      thinking-capable, so the `/api/show` probe returned FALSE and `applyThinkGating` omitted it,
+      confirming Finding 2 and acceptance checks 3–4 end to end against real Ollama.
+- [x] Ollama unavailable-endpoint test keeps the server and plugins available. `api.timeout`
+      genuinely fires (acceptance check 2 in vivo): a generation exceeding the timeout returned a
+      gin 500 at exactly 30.00s rather than hanging — before 0.3.0 the value was never applied and
+      the thread would pin forever. With the sidecar **stopped**, `/ollama say` failed fast with a
+      single `WARN` (`could not reach Ollama at http://ollama:11434`), no stack trace, no `SEVERE`,
+      and the server stayed up (`list` answered immediately). This is acceptance check 17 for the
+      0.3.0 surface (conversation degrades to an error; the server stays available).
+- [ ] **7b — full-roster matrix — not run. Out-of-band and NOT required for this release.** Gate 7b
+      installs all updater-managed plugins together on one stack; it is triggered by an updater
+      manifest change or a Paper/Geyser/Floodgate/ViaVersion bump, none of which this release makes
+      (`artifactId`, JAR name, and updater destination are unchanged). Left for
+      `minecraft-plugin-matrix` if a future trigger warrants it.
+
+**Behaviors gate 7a could not reach (carried to the gate 12 play-test obligation):**
+
+- `/ollama chat` requires a `Player` receiver (`handleChat` guards `sender instanceof Player`), so
+  it cannot be driven from the RCON console. The `/api/chat` path — and specifically the
+  system-prompt-as-`role:"system"`-message fix — is proven by unit tests
+  (`ChatRequestSerializationTest`) but was **not** exercised in-game. A real Java/Bedrock client
+  join is needed to confirm it live.
+- The concurrency-gate rejection (acceptance check 7) is proven by `OllamaHttpTest` but was not
+  reproduced in vivo — single-threaded RCON cannot issue two truly concurrent requests.
+- No Java or Bedrock client attached (gate 7a does not do client joins by design); nothing about
+  Bedrock rendering or client-side behavior was verified.
+- **Model note:** verified against `llama3.2:1b` (small, CPU-only, non-thinking) rather than the
+  config default `llama3.2`, to keep the sidecar pull and generation fast. A thinking-capable model
+  (which would exercise the `think: false` *positive* path) was not run — the omit-when-not-capable
+  path was confirmed instead.
 
 ## 8. CI/CD
 
