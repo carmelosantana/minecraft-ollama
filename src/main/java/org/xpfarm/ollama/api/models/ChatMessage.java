@@ -6,7 +6,12 @@ package org.xpfarm.ollama.api.models;
 public class ChatMessage {
     private String role;
     private String content;
-    
+    /**
+     * Populated by thinking-capable models. Parsed so it is never mistaken for {@code content};
+     * the plugin does not use it. Never send this field — it is response-only.
+     */
+    private String thinking;
+
     public ChatMessage() {}
     
     public ChatMessage(String role, String content) {
@@ -20,7 +25,10 @@ public class ChatMessage {
     
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
-    
+
+    public String getThinking() { return thinking; }
+    public void setThinking(String thinking) { this.thinking = thinking; }
+
     /**
      * Create a user message
      * 

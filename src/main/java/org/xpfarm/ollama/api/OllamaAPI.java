@@ -341,7 +341,7 @@ public class OllamaAPI {
         // Get system prompt from prompt manager
         String systemPrompt = plugin.getPromptManager().getSystemPrompt("chat", player);
         if (systemPrompt != null) {
-            request.setSystem(systemPrompt);
+            request.setSystemPrompt(systemPrompt);
             plugin.debugLog("Using system prompt for chat");
         }
         

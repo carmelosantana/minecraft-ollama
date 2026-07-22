@@ -8,6 +8,11 @@ public class ChatResponse {
     private String created_at;
     private ChatMessage message;
     private boolean done;
+    /**
+     * Why generation stopped — "stop" for a complete answer, "length" for one truncated at
+     * num_predict. Without it the two are indistinguishable.
+     */
+    private String done_reason;
     private long total_duration;
     private long load_duration;
     private int prompt_eval_count;
@@ -28,7 +33,10 @@ public class ChatResponse {
     
     public boolean isDone() { return done; }
     public void setDone(boolean done) { this.done = done; }
-    
+
+    public String getDone_reason() { return done_reason; }
+    public void setDone_reason(String done_reason) { this.done_reason = done_reason; }
+
     public long getTotal_duration() { return total_duration; }
     public void setTotal_duration(long total_duration) { this.total_duration = total_duration; }
     
