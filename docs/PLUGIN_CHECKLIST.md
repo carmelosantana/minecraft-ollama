@@ -1,491 +1,346 @@
 # New or Edited Plugin Checklist
 
+Leave an unchecked box with a short explanation when a gate is not complete; do not silently remove
+inapplicable checks.
+
 - Plugin name: `Ollama`
 - Slug: `ollama`
 - Repository: `carmelosantana/minecraft-ollama`
 - Owner: `Carmelo Santana`
-- Target version: `0.2.1` (released; no new version is proposed by this file)
+- Target version: `0.3.0` (then `0.4.0` — see Scope; both releases share this §1)
 - Paper version: `26.1.2 build 74`
 - Java version: `25`
 - Updater destination: `ollama.jar`
 - External services: `Ollama HTTP API` — opt-in, `enabled: false` by default
 - Status: `active`
+- Autonomy: `autonomous`
 
-Maven `groupId`/`artifactId`: `com.carmelosantana` / `ollama`. `plugin.yml` name: `Ollama`
-(main class `org.xpfarm.ollama.OllamaPlugin`). Releasable JAR: `ollama-<version>.jar`.
-Latest tag in this clone: `v0.2.1`.
-
----
-
-## READ THIS FIRST — this is a backfill, written 2026-07-21
-
-This plugin **predates the checklist process**. It has never had a `docs/PLUGIN_CHECKLIST.md`,
-and gates 1–6 and 8–12 were **never formally run or recorded** for it. This file is written after
-the fact to record what is *actually known*, not to reconstruct a history that does not exist.
-
-Accordingly:
-
-- **Gate 7a carries real evidence**, produced by the docker-rig-consolidation effort's shared test
-  rig, quoted verbatim below from `xpfarm-plugin-toolkit/.superpowers/sdd/task-5-report.md`. That
-  report does not state its own date; the sibling `task-4-report.md` dates the same effort
-  **2026-07-20**.
-- **Gate 7b cites a real recorded run** (the 2026-07-19 ecosystem matrix) in
-  `xpfarm-plugin-toolkit/CURRENT_STATE.md`. It was not re-run for this backfill.
-- Everything else is either an **observed fact** (something readable in the repo or manifest today,
-  with the place it was read stated) or is marked **NOT RECORDED / NOT RUN / UNKNOWN**.
-- An **observed fact is not a passed gate**. A checkbox is ticked only where a gate criterion is
-  genuinely satisfied by evidence quoted here.
-
-**This plugin's runtime history is the worst of the four backfilled repos** — see gate 7a. Its old
-`docker-compose.yml` never delivered the plugin to the stack *at all*, for two independent reasons.
-The 2026-07-20 rig boot is, together with the 2026-07-19 matrix run, the only trustworthy evidence
-this plugin has ever run.
+Maven `groupId`/`artifactId`: `org.xpfarm` / `ollama` — **the group moves from `com.carmelosantana`
+in 0.3.0** (see gate 3). `artifactId`, releasable JAR (`ollama-<version>.jar`), and updater
+destination (`ollama.jar`) are unchanged by that move, so the updater manifest needs no edit.
+`plugin.yml` name: `Ollama`, main class `org.xpfarm.ollama.OllamaPlugin`.
 
 ---
 
-## 1. Scope — NOT RECORDED
+## READ THIS FIRST — scope of this file
 
-- [ ] Status is explicitly recorded as active, experimental, or excluded. **NOT RECORDED at the
-      time.** `active` is asserted here from the plugin's presence in
-      `minecraft-plugin-updater/plugins.json` and in the Active Plugin Releases table of
-      `xpfarm-plugin-toolkit/CURRENT_STATE.md`. No scoping decision was ever written down —
-      notable for a plugin that pipes player chat to an LLM and can execute server commands.
-- [ ] Purpose, commands, events, permissions, configuration, persistence, and acceptance checks are
-      defined. **NOT RECORDED — predates the checklist process.** No requirements interview was
-      run; no acceptance checks were ever defined. `docs/API.md` exists and documents the
-      integration surface, but it is developer documentation, not a scoping record with acceptance
-      criteria. The surface below is **read out of `src/main/resources/plugin.yml` today**.
-- [ ] Known limitations and any intentionally withheld gates are recorded. **NOT RECORDED** for any
-      released version. Gaps known *as of this backfill* are under Known gaps.
+This checklist covers the **llama companion feature**, planned 2026-07-22, shipping as two releases:
 
-### Commands and permissions — observed from `src/main/resources/plugin.yml`
+- **`0.3.0`** — Ollama HTTP client currency and correctness. Prerequisite, independently shippable.
+- **`0.4.0`** — the craftable llama companion itself.
 
-| Command | Usage | Permission |
-| --- | --- | --- |
-| `/ollama` | `/ollama <subcommand>` | `ollama.use` |
+The prior checklist for `v0.2.1` was a **backfill** written 2026-07-21 and is preserved verbatim at
+`docs/PLUGIN_CHECKLIST-0.2.1-backfill.md`. It carries the only trustworthy runtime evidence this
+plugin has ever produced (the 2026-07-20 rig boot and the 2026-07-19 / 2026-07-21 matrix runs) and
+is cited from `xpfarm-plugin-toolkit/CURRENT_STATE.md`. **Do not treat that file as superseded** —
+gates 7a and 7b in it remain the plugin's runtime record until this cycle produces new evidence.
 
-Permissions declared, with their **shipped defaults**:
+Design document: `docs/superpowers/specs/2026-07-22-llama-companion-design.md`. It carries the
+research citations behind every non-obvious decision below.
 
-| Permission | Default |
+**Autonomy is `autonomous`**, chosen by Carmelo Santana on 2026-07-22 during the gate 1 interview.
+That choice **is** the GitHub push authorization for this entire pipeline, granted once, in writing,
+here. Downstream skills do not re-prompt before pushing, tagging, releasing, enrolling, or
+deploying. Evidence standards are unchanged: a failed `mvn verify`, a red or still-running Actions
+run, a checksum mismatch, a plugin that does not enable, or a failed updater dry-run halts the
+pipeline and reports what failed.
+
+---
+
+## 1. Scope
+
+- [x] Status is explicitly recorded as active, experimental, or excluded. **`active`.** The plugin
+      is enrolled in `minecraft-plugin-updater/plugins.json` unpinned and enabled, and appears in
+      the Active Plugin Releases table of `xpfarm-plugin-toolkit/CURRENT_STATE.md`. No gates are
+      intentionally withheld for either release.
+- [x] Purpose, commands, events, permissions, configuration, persistence, and acceptance checks are
+      defined. Recorded below, from the 2026-07-22 requirements interview plus two dispatched deep
+      research passes.
+- [x] Known limitations and any intentionally withheld gates are recorded. See Known limitations
+      and Unverified below. **No gates are withheld.**
+
+### Player-facing purpose
+
+A player can craft a llama companion that follows them, that they can talk to, and that notices
+things about their gear — like carrying a shield without having it equipped. Asking it a question
+gets an answer from the server's Ollama model; its reminders come from fixed rules and work even
+when Ollama is switched off.
+
+### Release 0.3.0 — API client currency (no player-facing change)
+
+Fixes and modernizes the Ollama HTTP client so the companion can stand on it. **This release also
+discharges follow-up 1 of the 0.2.1 backfill** — the first time `/ollama` is exercised end to end
+against a real endpoint in-game.
+
+| Change | Driver |
 | --- | --- |
-| `ollama.use` | `true` (everyone) |
-| `ollama.generate` | `true` (everyone) |
-| `ollama.code` | `true` (everyone) |
-| `ollama.chat` | `true` (everyone) |
-| `ollama.admin` | `op` |
-| `ollama.run` | `op` |
-| `ollama.debug` | `op` |
+| Delete `ChatRequest.system`; prepend a `role: "system"` message instead | `/api/chat` has never had a top-level `system` field, at any Ollama version. Gin drops unknown keys, so the request returns 200 and the prompt is discarded. `chatWithSystemPrompt()` has never worked. |
+| Apache HttpClient 4.5.14 → `java.net.http.HttpClient` | Built into Java 25. Removes a shaded dependency instead of adding one; provides real timeouts and `BodyHandlers.ofLines()`. 4.5.14 is the terminal 4.x release. |
+| Apply `api.timeout` and `api.max_retries` | Both are read from config today and never used. |
+| Send `think` explicitly (default `false`); parse and discard `thinking` | Since Ollama v0.12.4, **omitting `think` means `true`** on capable models. |
+| `format`: `String` → `JsonElement` | As typed it can only send `"json"`; a JSON Schema is impossible. |
+| Add `done_reason` to both response models | Otherwise a truncated answer is indistinguishable from a complete one. |
+| Status-code dispatch (400/404/499/500/503/timeout) | Today a non-200 is logged and the body parsed and delivered anyway. |
+| Concurrency gate — `Semaphore`, default 1 | `OLLAMA_NUM_PARALLEL` defaults to 1, and a **warm** model does not 503 when overloaded; it stalls on a semaphore indefinitely. Overload appears as unbounded latency, never as an error. |
+| `/api/show` capability probe, cached per model | Sending `think` to a non-thinking model is a hard 400. |
+| Model preload on enable (empty prompt) | Pays the cold-load cost at startup rather than on a player's first message. |
+| Gson 2.10.1 → 2.14.0 | Four years behind. |
 
-Four of seven permissions default to **every player**. That is a deliberate-looking choice with no
-recorded rationale; it is recorded here as an observation, not endorsed. `ollama.run` (command
-execution) correctly defaults to `op`, and `config.yml` additionally ships
-`commands.enable_execution: false`.
+Metadata corrections in the same release: `api-version` → `'26.1'`, `version: '${project.version}'`,
+`groupId` → `org.xpfarm`, and ViaVersion documented as a hard runtime requirement. See gates 3 and 4.
 
-Subcommand names are not enumerated in `plugin.yml` (`usage` is generic) and were not extracted
-from source for this backfill.
+### Release 0.4.0 — the companion
 
-### Known gaps (as of this backfill)
+New package `org.xpfarm.ollama.companion`. The llama is **downed, not killed**: at lethal damage it
+collapses, despawns, and returns the summon item, rather than dying permanently or being immortal.
 
-- One test class exists (`src/test/java/org/xpfarm/ollama/api/OllamaAPITest.java`). The report for
-  the 2026-07-20 build **did not quote a test count**, so no test-count figure is claimed here.
-- No acceptance criteria exist against which any release could be judged.
-- Runtime evidence covers **load and enable** plus the sidecar wiring — no `/ollama` subcommand has
-  ever been dispatched on a stack, and no generation request has ever been observed succeeding
-  against a real Ollama endpoint from inside Minecraft.
+**Commands**
 
-## 2. Repository — PARTIAL (observed)
+| Command | Arguments | Permission | Who |
+| --- | --- | --- | --- |
+| `/llama ask` | `<text>` | `ollama.llama.use` | everyone |
+| `/llama recipe` | — | `ollama.llama.use` | everyone |
+| `/llama dismiss` | — | `ollama.llama.use` | everyone |
+| `/llama give` | `[player]` | `ollama.llama.give` | op |
 
-- [x] Repository is `carmelosantana/minecraft-ollama` with an SSH `origin` and `main` branch.
-      **Observed** via `git remote -v`: `origin git@github.com:carmelosantana/minecraft-ollama.git`.
-      This file is committed on `test/docker-rig-consolidation`, branched off `main`.
-- [ ] Existing user-owned worktree changes were identified and preserved. **NOT RECORDED as a
-      gate.** Observed today: clean tree on `test/docker-rig-consolidation`. The rig-migration
-      report states the repo was `## main...origin/main` with no local changes before branching.
-- [ ] No `herobrinesystems` references remain in source, metadata, workflows, remotes, or
-      documentation. **PARTIALLY CHECKED, not a formal audit.** A case-insensitive grep of the
-      working tree run on 2026-07-21 returned **zero hits**. Scope limits: it excluded `target/`,
-      `.git/`, `releases/`, and `server/`, and therefore says **nothing about git history**.
+`/llama give` is an admin and test affordance, not a player-facing bypass of crafting. It is also
+how gate 7a summons a companion without crafting one.
 
-## 3. Metadata — PARTIAL (observed)
+`plugin.yml` command descriptions stay short: Bedrock 1.21.130+ caps command name and description
+length, and overlong descriptions have historically prevented Bedrock clients from joining at all.
 
-- [x] AGPL-3.0-or-later `LICENSE` and Maven license metadata are present and consistent.
-      **Observed:** `LICENSE` begins "GNU AFFERO GENERAL PUBLIC LICENSE / Version 3, 19 November
-      2007"; `pom.xml` declares `<name>GNU Affero General Public License v3.0 or later</name>`.
-- [ ] `https://xpfarm.org` metadata and Carmelo Santana author metadata are present. **HALF
-      PRESENT.** Author metadata is there — `plugin.yml` `author: Carmelo Santana`. The
-      `xpfarm.org` URL is **not**: `pom.xml` `<url>` and `plugin.yml` `website:` both point at
-      `https://github.com/carmelosantana/minecraft-ollama`. A grep of the working tree found the
-      string `xpfarm` only as the Java package `org.xpfarm.ollama` and the shade relocation targets
-      — **never as an `xpfarm.org` URL**. Left unchecked; this backfill must not edit `pom.xml` or
-      `plugin.yml`.
-- [ ] `play.xpfarm.org` is recorded as the public Minecraft server hostname where server identity
-      is documented. **NOT PRESENT.** A grep of the working tree on 2026-07-21 found **no**
-      `play.xpfarm.org` reference anywhere in this repository.
-- [ ] New work uses the `org.xpfarm` Maven group, or an existing-coordinate compatibility decision
-      is documented. **NOT SATISFIED.** `pom.xml` still declares
-      `<groupId>com.carmelosantana</groupId>` — the only one of the four backfilled repos that has
-      not been moved to `org.xpfarm`. The Java package **is** `org.xpfarm.ollama`, so group and
-      package disagree. **No compatibility decision documenting this is recorded anywhere.** This
-      is an open inconsistency, not a resolved choice.
-- [x] Repository slug, artifact, releasable JAR, updater destination, and `plugin.yml` names are
-      consistent. **Observed:** slug `ollama`, artifact `ollama`, JAR `ollama-0.2.1.jar`, updater
-      destination `ollama.jar`, `plugin.yml` name `Ollama`. The manifest `asset_regex`
-      `^ollama-[0-9].*\.jar$` matches the JAR name.
+**Events**
+
+| Event | Why |
+| --- | --- |
+| `PlayerInteractAtEntityEvent` | Right-click to open the conversation. The parent `PlayerInteractEntityEvent` is `@ApiStatus.Obsolete` on 26.x. Guarded with `getHand() != EquipmentSlot.HAND` — a single Bedrock tap fires up to two interact packets. |
+| `EntityDamageEvent` (`HIGHEST`, `ignoreCancelled`) | Downed state. Lethal → cancel, `setHealth(1)`, `setAware(false)`, despawn, return item. `VOID` → cancel **and** teleport back. `KILL` passes through so `/kill @e` still works for admins. |
+| `PlayerPortalEvent`, `PlayerChangedWorldEvent` | Mobs do not follow through portals; the companion is teleported explicitly via `teleportAsync`. |
+| `PlayerJoinEvent` | `discoverRecipe()` — `Bukkit.addRecipe` alone does not populate a recipe book. |
+| `CraftItemEvent` / `PrepareItemCraftEvent` | Server-side validation of the summon craft. |
+| `EntityMountEvent` | Backstop cancel; right-click with an empty hand mounts a vanilla llama. |
+
+**Permissions**
+
+| Permission | Default | Gates |
+| --- | --- | --- |
+| `ollama.llama.use` | `true` | Crafting, summoning, conversing with your own companion |
+| `ollama.llama.give` | `op` | `/llama give` |
+
+**Configuration** — new `companion:` block
+
+| Key | Type | Default | Validation |
+| --- | --- | --- | --- |
+| `companion.enabled` | boolean | `true` | — |
+| `companion.invulnerable` | boolean | `true` | Baseline only; downed handling is always active |
+| `companion.follow_interval` | int (ticks) | `10` | 1–100 |
+| `companion.teleport_distance` | int (blocks) | `24` | 8–128 |
+| `companion.nudges.enabled` | boolean | `true` | — |
+| `companion.nudges.cooldown` | int (seconds) | `300` | ≥ 30 |
+| `companion.nudges.rules` | list | `[shield, food, tool_durability, torches]` | Unknown names rejected at load with a logged warning |
+
+Conversation additionally requires the existing top-level `enabled: true` and a reachable endpoint.
+Crafting, following, downed/revive, and nudges do not.
+
+**Persistence**
+
+Entity PDC only — Paper writes a `BukkitValues` compound into entity NBT, which survives chunk
+unload and restart with no custom storage layer. The companion's UUID is stored in the owner's
+player PDC as a `STRING` (there is no `PersistentDataType.UUID`); the owner's UUID is stored in the
+mob's PDC. Resolution is `Bukkit.getEntity(uuid)` — O(1), does not load chunks. **A `null` result
+means the chunk is unloaded, not that the companion was deleted**; the binding is dropped only on an
+explicit removal event. `world.getEntities()` is never scanned. Nothing is written to disk directly.
+
+**Dependencies**
+
+Unchanged hard dependencies: none. `softdepend: [ViaVersion]` stays, but ViaVersion is promoted in
+documentation to a **hard runtime requirement** — Geyser emulates a Java 26.2 client and this server
+is 26.1.2, so ViaVersion is what bridges the gap. No Geyser, Floodgate, or Cumulus dependency is
+added: the Paper Dialog API is auto-converted to Bedrock forms by Geyser, so one code path serves
+both editions. Shading Cumulus is a documented `LinkageError` generator and is not done.
+
+**External integrations**
+
+`Ollama HTTP API` only — unchanged in kind. Still opt-in and `enabled: false` by default, still
+bounded by `api.timeout` (which 0.3.0 makes real rather than decorative), and now additionally
+bounded by a client-side concurrency gate. No credential field exists in config. No new external
+service is introduced by either release.
+
+### Acceptance checks
+
+Testable pass/fail conditions. These become gate 6 unit tests and gate 7a runtime verification.
+
+**0.3.0**
+
+1. A chat request built with a system prompt places it as a `role: "system"` message and carries no
+   top-level `system` field.
+2. `api.timeout` elapsing aborts the request and surfaces an error, rather than pinning a thread.
+3. `think` is present in every chat and generate request body.
+4. A model without the `thinking` capability is never sent `think: true`.
+5. `format` set to a JSON Schema object serializes as an object, not a string.
+6. 400, 404, 499, 500, 503, and timeout each map to their distinct documented action.
+7. With the gate at 1, a second concurrent request is rejected with a player-visible message rather
+   than queued.
+8. `/ollama chat` returns a real generated answer from a live endpoint, in-game, on a stack.
+
+**0.4.0**
+
+9. The recipe produces exactly one PDC-tagged summon item from vanilla ingredients.
+10. Placing the summon item spawns a llama bound bidirectionally to the placing player.
+11. The companion follows across chunk boundaries and through a nether portal.
+12. Lethal damage returns the summon item and does not kill the entity; `/kill` does kill it.
+13. Void damage returns the companion to the owner rather than losing it.
+14. The companion survives a full server restart and is re-resolved by UUID.
+15. Right-clicking opens the dialog on Java and on Bedrock.
+16. A player carrying a shield with an empty offhand receives the shield nudge; a player with the
+    shield equipped does not.
+17. With Ollama unreachable, crafting, following, downing, and nudges all still work, and
+    conversation fails with an in-character message. The server stays available.
+18. The nudge cooldown is honored per player.
+
+### Known limitations
+
+Bedrock, verified against Geyser and Floodgate sources on 2026-07-22:
+
+1. Custom recipes do not appear in the Bedrock recipe book. Hand-placing ingredients works, because
+   only the recipe *output* carries custom data and the Java server resolves the craft.
+   `/llama recipe` mitigates discoverability.
+2. Geyser's recipe-book auto-craft is currently broken for **all** recipes including vanilla —
+   open issue GeyserMC/Geyser#6563, opened 2026-07-21.
+3. Chat over 256 characters is dropped by Geyser before reaching the server; no chat event fires.
+   This bounds free-form prompt length for Bedrock players.
+4. No tab completion, ever — Bedrock sends no packet indicating the player is in the chat UI.
+5. Dialog text inputs are single-line and default to a 32-character limit; `max_length` must be set
+   explicitly and `multiline` is ignored.
+6. The summon item renders as a plain vanilla item on Bedrock. `custom_model_data` requires a
+   Bedrock resource pack plus hand-written Geyser item mappings, which are out of scope.
+7. Off-hand interaction is unreliable (GeyserMC/Geyser#3480). Nothing depends on it.
+8. A single Bedrock tap fires up to two interact events; every listener guards on `EquipmentSlot.HAND`.
+9. ViaVersion is mandatory, not optional.
+
+General:
+
+10. The downed mechanic has **no vanilla precedent** — wolves die permanently, and Allays are
+    damageable (they merely do not despawn). It is entirely plugin-side behavior.
+11. Conversation quality depends on the operator's model choice, which this plugin does not control.
+12. Streaming responses, tool calling, embeddings, and multiple companions per player are out of
+    scope. Streaming and tool calling both become *possible* after 0.3.0 and are the natural 0.5.0
+    conversation.
+
+### Unverified — to confirm at runtime, not asserted
+
+- Which Bukkit events CraftBukkit 26.1 fires from the merged interact packet. MCProtocolLib split
+  `ServerboundInteractPacket` from `ServerboundAttackPacket` on 2026-03-14; no Paper-side
+  documentation of the resulting event behavior was found.
+- Whether explosion knockback still displaces an entity with `setInvulnerable(true)`.
+- Whether the Bedrock client populates the crafting output slot with zero matching `CraftingData`
+  entries. Source reading and two issue reports suggest yes; no authoritative statement found.
+- Cold-model-load latency — no official figure is published; it must be measured on the target host.
+
+## 2. Repository
+
+- [ ] Repository is `carmelosantana/minecraft-ollama` with an SSH `origin` and `main` branch.
+- [ ] Existing user-owned worktree changes were identified and preserved.
+- [ ] No `herobrinesystems` references remain in source, metadata, workflows, remotes, or documentation.
+
+## 3. Metadata
+
+- [ ] AGPL-3.0-or-later `LICENSE` and Maven license metadata are present and consistent.
+- [ ] `https://xpfarm.org` metadata and Carmelo Santana author metadata are present.
+- [ ] `play.xpfarm.org` is recorded as the public Minecraft server hostname where server identity is documented.
+- [ ] New work uses the `org.xpfarm` Maven group, or an existing-coordinate compatibility decision is documented.
+- [ ] Repository slug, artifact, releasable JAR, updater destination, and `plugin.yml` names are consistent.
 - [ ] No secrets committed in source, defaults, tests, logs, history, or documentation.
-      **NOT AUDITED.** No secret scan was run for this backfill. Observed only: `config.yml` ships
-      a localhost endpoint (`http://localhost:11434`) and **no credential field at all**, so there
-      is no API key in defaults to leak. That is an observation about the default file, not a scan
-      of source, tests, or history.
 
-**Observed version-drift hazard.** `plugin.yml` hardcodes `version: 0.2.1` rather than using
-`version: '${project.version}'` as the sibling repos do. It happens to match `pom.xml` today, so
-gate 9's consistency check passes — but nothing enforces that, and a POM bump without a matching
-`plugin.yml` edit would ship a JAR that lies about its own version. Recorded, not fixed (this
-backfill must not touch `plugin.yml`).
+**Planned in 0.3.0, from the gate 1 interview** — carried here so gate 3 does not rediscover them:
 
-**Observed drift note:** `pom.xml` sets `<maven.compiler.release>25</maven.compiler.release>` while
-the `maven-compiler-plugin` block also carries `<source>21</source>`. Which wins was **not
-investigated**.
+- `groupId` moves `com.carmelosantana` → `org.xpfarm`, resolving the group/package split the 0.2.1
+  backfill recorded as an open inconsistency (its follow-up 3). `artifactId`, JAR name, and updater
+  destination are unchanged, so the updater manifest needs no edit.
+- `plugin.yml` `version:` becomes `'${project.version}'`, removing the drift hazard the backfill
+  recorded — today the value is hardcoded and happens to match.
+- `pom.xml` `<url>` and `plugin.yml` `website:` still point at the GitHub repository rather than
+  `https://xpfarm.org`; `play.xpfarm.org` appears nowhere in this repository. Both were unchecked in
+  the backfill and remain to be addressed.
 
-## 4. Compatibility — PARTIAL
+## 4. Compatibility
 
-- [x] Java 25/Paper 26.1.2 build 74 compile succeeds and `plugin.yml` uses `api-version: '1.21'`.
-      **Real evidence** from `task-5-report.md`:
+- [ ] Java 25/Paper 26.1.2 build 74 compile succeeds and `plugin.yml` uses `api-version: '26.1'`, matching the API compiled against (see `PLUGIN_LIFECYCLE.md` §4 — a lower value opts the JAR into Paper's `Commodore` bytecode rewrites).
+- [ ] Hard dependencies, soft dependencies, optional APIs, and load ordering were reviewed and declared.
+- [ ] Geyser/Floodgate/ViaVersion review covers Bedrock-safe input, UI, inventory, identity, and protocol behavior.
 
-      ```
-      [INFO] Replacing original artifact with shaded artifact.
-      [INFO] BUILD SUCCESS
-      ```
+**The Bedrock review the 0.2.1 backfill recorded as "NEVER PERFORMED" was performed on 2026-07-22**
+as part of gate 1 research, against Geyser and Floodgate sources at `master` and the decompiled
+`paper-api-26.1.2.build.74-stable.jar`. Its findings are in §1 Known limitations and in
+`docs/superpowers/specs/2026-07-22-llama-companion-design.md`. The box stays unchecked here because
+the review covers the *planned* 0.4.0 surface, not shipped code — gate 4 ticks it when the code
+exists and matches. Three facts it established that bind implementation:
 
-      (jar: `target/ollama-0.2.1.jar`). `pom.xml` depends on
-      `io.papermc.paper:paper-api:26.1.2.build.74-stable` (`provided`). `plugin.yml` declares
-      `api-version: 1.21` — **unquoted**, unlike the sibling repos' `'1.21'`. YAML parses that as a
-      float; Paper accepted it on the 2026-07-20 boot, so it works in practice, but it is a
-      deviation from the house form and is recorded as such.
-- [x] Hard dependencies, soft dependencies, optional APIs, and load ordering were reviewed and
-      declared. **Observed:** `plugin.yml` declares `softdepend: [ViaVersion]` and no hard
-      `depend`. Runtime-scoped POM dependencies are `com.google.code.gson:gson:2.10.1` and
-      `org.apache.httpcomponents:httpclient:4.5.14`, both **shaded with relocations** —
-      `com.google.gson` → `org.xpfarm.ollama.libs.gson`, `org.apache.http` →
-      `org.xpfarm.ollama.libs.http` — so neither can collide with another plugin's copy.
-      `paper-api` is `provided`; `junit-jupiter` and `mockito-core` are `test`.
-- [ ] Geyser/Floodgate/ViaVersion review covers Bedrock-safe input, UI, inventory, identity, and
-      protocol behavior. **NEVER PERFORMED — NOT RECORDED.** The `softdepend: [ViaVersion]` line is
-      a load-order declaration, not a review. This plugin's surface is chat and command text, which
-      is exactly where Bedrock input differs (no tab completion via Geyser, `.`-prefixed Floodgate
-      usernames, different character handling). Whether any of that was considered is **UNKNOWN**.
-      The gate 7a boot shows coexistence with Geyser/Floodgate/ViaVersion; that is not a review.
+- `api-version` must become `'26.1'`. `paper-api 26.1.2` is Minecraft Java **26.1**, not 1.21;
+  Mojang moved to `YY.D[.H]` versioning in 2026. A lower value opts the JAR into Paper's
+  `Commodore` bytecode rewrites. An uncommitted worktree change currently quotes `'1.21'` — right
+  instinct about quoting, wrong value.
+- **ViaVersion is a hard runtime requirement.** Geyser emulates a Java 26.2 client against this
+  26.1.2 server; ViaVersion is what makes that connection possible. `softdepend` stays for load
+  order, but the documentation must stop implying it is optional.
+- **No Geyser, Floodgate, or Cumulus dependency is needed.** The Paper Dialog API is auto-converted
+  to Bedrock forms by Geyser, so one code path serves both editions.
 
-## 5. External services — PARTIAL (defaults observed; failure path evidenced elsewhere)
+## 5. External services
 
-- [x] External integrations are disabled by default or require explicit configuration and have
-      bounded timeouts. **Observed** in `src/main/resources/config.yml`:
+- [ ] External integrations are disabled by default or require explicit configuration and have bounded timeouts.
+- [ ] Ollama/Umami-style external endpoints are optional and failure-tolerant when applicable.
+- [ ] Endpoint failure cannot fail server/plugin startup, and diagnostics redact secrets.
 
-      ```yaml
-      # Ollama integration is opt-in. When false, no API client or listeners are started.
-      enabled: false
-      ...
-        endpoint: "http://localhost:11434"
-        timeout: 30
-        max_retries: 3
-      ```
+## 6. Tests and build
 
-      Off by default; the endpoint is localhost; the timeout is bounded at 30 seconds with
-      `max_retries: 3`. Also observed: `commands.enable_execution: false` with a
-      `blocked_commands` list (`stop`, `restart`, `op`, `deop`, `ban`, `kick`) and
-      `require_confirmation: true`, and `performance.rate_limit: 10` per player per minute.
-      **These are the shipped values, read today. That the code honours them was not verified
-      here.**
-- [x] Ollama/Umami-style external endpoints are optional and failure-tolerant when applicable.
-      **Evidence exists, but it is the matrix run's, not this gate's.**
-      `xpfarm-plugin-toolkit/CURRENT_STATE.md` records that on 2026-07-19 the plugin was
-      deliberately pointed at TEST-NET-2 `198.51.100.9` to exercise the real failure path: "Ollama
-      caught `java.net.SocketException: Network is unreachable`, retried once and stopped (bounded,
-      no loop)" and "Server stayed available. No credential-shaped strings in logs." That is a real
-      negative-path observation for this plugin. It is cited from that document; it was **not
-      re-run** here.
-- [x] Endpoint failure cannot fail server/plugin startup, and diagnostics redact secrets. Same
-      2026-07-19 evidence: the server stayed available and no credential-shaped strings appeared.
-      Note `config.yml` defines **no credential field**, so "redaction" is largely untested by
-      construction — there was nothing to redact.
-
-## 6. Tests and build — PARTIAL
-
-- [ ] Unit tests cover separable logic, configuration, serialization, permissions, and failure
-      paths. **THIN AND UNQUANTIFIED.** Exactly one test class exists,
-      `src/test/java/org/xpfarm/ollama/api/OllamaAPITest.java` (JUnit 5 + Mockito). The 2026-07-20
-      build report quoted only `BUILD SUCCESS` and **did not record a test count**, so no number is
-      claimed. Nothing is known about coverage of config parsing, the permission defaults, the
-      command allow/block list, or the rate limiter.
-- [x] `mvn --batch-mode --no-transfer-progress clean verify` succeeds. **Real evidence**, quoted
-      above from `task-5-report.md`.
-- [ ] The releasable JAR and embedded `plugin.yml` were inspected; `original-*` JARs are excluded.
-      **NOT RECORDED.** The shaded JAR has never been unzipped and inspected — which matters more
-      here than in the non-shading repos, since the relocations above are unverified at the
-      bytecode level. Observed instead: `.github/workflows/build.yml` filters `! -name 'original-*'`
-      on the checksum, artifact-upload, and release-upload steps, so an `original-*` JAR cannot
-      reach a release. `dependency-reduced-pom.xml` is produced by the shade plugin locally and is
-      **git-ignored** here (`.gitignore:3`).
+- [ ] Unit tests cover separable logic, configuration, serialization, permissions, and failure paths where applicable.
+- [ ] `PluginDescriptorTest` parses `plugin.yml` and `config.yml` with SnakeYAML and asserts `name`, `main`, a `String`-typed `api-version`, a fully-substituted `version`, every command the code looks up, every permission the code checks, and the declared soft dependencies.
+- [ ] `mvn --batch-mode --no-transfer-progress clean verify` succeeds.
+- [ ] The shaded releasable JAR and embedded `plugin.yml` were inspected; `original-*` JARs are excluded.
 
 ## 7. Matrix
 
-### 7a — single-plugin runtime verification — PARTIAL (real evidence, narrow scope)
+- [ ] Fresh-volume [Legendary Java Minecraft Geyser Floodgate stack](https://github.com/TheRemote/Legendary-Java-Minecraft-Geyser-Floodgate) test covers every updater-managed plugin.
+- [ ] Each updater-managed plugin's manifest `enabled` value, default state, and expected fresh-volume behavior are recorded separately.
+- [ ] Paper, Geyser, Floodgate, and ViaVersion start successfully together.
+- [ ] Affected commands, permissions, persistence, and configuration reload were exercised over RCON with no server-wide hot reload.
+- [ ] Ollama and Umami unavailable-endpoint tests keep the server and plugins available when applicable.
 
-Evidence source: **this effort's shared test rig** (`xpfarm-plugin-toolkit/bin/xpfarm-test-stack`)
-plus this repo's new `scripts/extra-services.yml` sidecar overlay, on a disposable fresh-volume
-Legendary stack, recorded verbatim in `xpfarm-plugin-toolkit/.superpowers/sdd/task-5-report.md`.
+## 8. CI/CD
 
-#### The old compose file never ran this plugin — two independent, confirmed defects
+- [ ] Identical standard plugin Actions workflow is installed with the required triggers, Temurin 25 build, artifact, checksum, and release behavior.
+- [ ] Successful main Actions run is recorded before tagging.
+- [ ] Workflow permissions contain no broader access than the documented contract.
 
-Both were **confirmed present in the deleted `docker-compose.yml`** during the 2026-07-20
-migration, and both are recorded here as genuine history rather than as gate evidence:
+## 9. Release
 
-1. **The plugin was never delivered to the stack.** The compose file set **both** an exec-form
-   `entrypoint:` **and** a `command:` block on the `minecraft` service. Docker passes `command` as
-   *arguments to the entrypoint*, so the entire `bash -c` readiness-wait-plus-plugin-copy script
-   was handed to `start.sh` as positional junk and **never ran**. The stack came up; the plugin was
-   simply not there.
-2. **The healthcheck could never have passed.** It ran
-   `curl -f http://localhost:11434/api/version`, and the `ollama/ollama` image **ships no `curl`**
-   — verified during the migration ("`curl absent`"). `ollama list` does work inside the image and
-   is what the replacement healthcheck uses.
+- [ ] Semantic version matches the POM, plugin metadata, and `v<version>` tag.
+- [ ] Successful tag Actions run and GitHub release are recorded.
+- [ ] Release contains exactly one updater-matching JAR plus `SHA256SUMS.txt` and no `original-*` JAR.
+- [ ] Downloaded release assets pass `sha256sum --check SHA256SUMS.txt`.
 
-Two further problems in the same file: the sidecar published `11434:11434` on the host
-unconditionally, outside the slot lease, and its `command:` ran `ollama pull llama3.2` on every
-boot.
+## 10. Updater
 
-**Both defects are now fixed** by `scripts/test-stack.sh` (the shared rig, which mounts the newest
-`target/*.jar` and *asserts* the plugin is enabled) plus `scripts/extra-services.yml`, in which the
-base compose owns the entrypoint, the overlay sets **neither** `command:` nor `entrypoint:`,
-readiness comes from `depends_on: ollama: condition: service_healthy` rather than a shell loop,
-`11434` is not host-published, and there is no `ollama pull`.
-
-The consequence for this checklist is blunt: **no runtime claim about this plugin made before
-2026-07-19 can be trusted**, because the local harness that would have produced it was incapable
-of loading the plugin.
-
-#### What was actually observed on 2026-07-20
-
-- [x] Paper, Geyser, Floodgate, and ViaVersion start successfully together, with the plugin loaded
-      **and enabled**. **VERIFIED.**
-
-      The sidecar reached healthy *before* Paper started — the ordering the old compose faked with
-      a shell loop:
-
-      ```
-       Container xpfarm-plugin-test-ollama-bae39558-ollama-1 Started
-       Container xpfarm-plugin-test-ollama-bae39558-ollama-1 Waiting
-       Container xpfarm-plugin-test-ollama-bae39558-ollama-1 Healthy
-       Container xpfarm-plugin-test-ollama-bae39558-minecraft-1 Starting
-       Container xpfarm-plugin-test-ollama-bae39558-minecraft-1 Started
-      ```
-
-      Paper's own completion line:
-
-      ```
-      minecraft-1  | >....[K[16:54:14 INFO]: Done (16.066s)! For help, type "help"
-      ```
-
-      A **real Minecraft protocol handshake** against the Java port — not a bare TCP connect:
-
-      ```
-      MOTD: "A Minecraft Server"
-      VERSION: Paper 26.1.2 | protocol 775
-      PLAYERS: 0 / 20
-      ```
-
-      RCON `plugins`, captured raw with `cat -v` so the `§` colour bytes are visible as `M-BM-'`:
-
-      ```
-      AUTH OK
-      $ plugins
-      M-BM-'xM-BM-'3M-BM-'4M-BM-'9M-BM-'fM-BM-'dM-BM-'aM-bM-^DM-9 M-BM-'fServer Plugins (4):
-      M-BM-'xM-BM-'eM-BM-'dM-BM-'8M-BM-'1M-BM-'0M-BM-'6Bukkit Plugins:
-       M-BM-'8- M-BM-'afloodgateM-BM-'r, M-BM-'aGeyser-SpigotM-BM-'r, M-BM-'aOllamaM-BM-'r, M-BM-'aViaVersion
-      ```
-
-      `Ollama` is prefixed `M-BM-'a` = `§a` = **green = enabled**, not merely listed. The header
-      count `(4)` matches the four names listed. No Geyser/Floodgate/ViaVersion **version strings**
-      were recorded for this run — only presence and green state.
-
-      Port containment was also verified, three ways:
-
-      ```
-      NAME                                             SERVICE     STATUS                    PORTS
-      xpfarm-plugin-test-ollama-bae39558-ollama-1      ollama      Up 46 seconds (healthy)   11434/tcp
-      ```
-
-      ```
-      === any host binding to 11434? ===       -> no host binding to 11434 (GOOD)
-      === docker port ollama container ===     -> ollama publishes nothing to host (GOOD)
-      === docker inspect health ===            -> ...-ollama-1 => healthy
-      ```
-
-- [ ] Java and Bedrock smoke tests cover joins plus commands, events, permissions, persistence, and
-      reloads. **NOT DONE — neither side.** No client joined; **no `/ollama` subcommand was ever
-      dispatched**; no generation request was made from inside Minecraft. Note that the plugin
-      ships `enabled: false`, so on this boot it would have started **dormant** — the sidecar was
-      healthy and reachable, but nothing exercised the API path. Load-and-enable is the entire
-      behavioral claim.
-- [ ] Public deployment smoke tests verify `play.xpfarm.org` reaches the intended entry points.
-      Belongs to gate 11; **NOT DONE**.
-- [x] Ollama and Umami unavailable-endpoint tests keep the server and plugins available.
-      **Evidence exists but belongs to the 2026-07-19 matrix run** — see gate 5. Not exercised on
-      the 2026-07-20 rig boot, where the endpoint was reachable and the plugin dormant.
-
-### 7b — ten-plugin ecosystem matrix — PASSED, but recorded elsewhere and not re-run here
-
-Not run by this backfill. `xpfarm-plugin-toolkit/CURRENT_STATE.md` records an
-**Ecosystem Matrix Run (2026-07-19) — PASSED 11/11** on a fresh-volume Legendary stack, installing
-every plugin through the one-shot updater from published release assets. Its row for this plugin:
-
-| Plugin | Installed | Enabled in log | Result |
-|---|---|---|---|
-| Ollama | 0.2.1 | Ollama | PASS |
-
-That run reported `Done (18.076s)`, zero SEVERE or exception lines, and that each installed JAR's
-SHA-256 matched its published `SHA256SUMS.txt` digest. It also carried the negative-path evidence
-quoted under gate 5, and it explicitly notes that with no endpoint configured the default run
-"only proved dormancy". Cited, not reproduced. No client join was performed in that run either.
-
-### 7b — ecosystem matrix (12 plugins) — PASSED 2026-07-21
-
-Trigger: the updater manifest changed — Timber Blast `v1.0.0` was enrolled
-(`carmelosantana/minecraft-plugin-updater` commit `6065b03`), taking the roster from 11 to 12.
-
-- [x] Fresh-volume Legendary stack test covers all updater-managed plugins. **12/12 PRESENT.**
-      Run via the shared rig (`xpfarm-test-stack matrix up --from-releases`) on a fresh volume,
-      roster read from the live `plugins.json` rather than a hardcoded list. The rig cross-checks
-      the plugin count the server announces against what it parsed, and asserts each plugin is
-      **enabled**, not merely listed.
-- [x] Each updater-managed plugin's manifest `enabled` value, default state, and expected
-      fresh-volume behavior are recorded separately. All 12 entries have `enabled` absent
-      (equivalent to `true`) and no `pin`; every one was therefore expected to install and enable,
-      and every one did. No entry was disabled, so there is no intentional-absence row this run.
-- [x] Paper, Geyser, Floodgate, and ViaVersion start successfully together.
-      Paper reached `Done (15.543s)! For help, type "help"`; the Java port answered a real
-      protocol handshake reporting `Paper 26.1.2 | protocol 775`, `PLAYERS: 0 / 20`. Companions:
-      Geyser-Spigot 2.11.0-SNAPSHOT, floodgate 2.2.5-SNAPSHOT, ViaVersion 5.11.0.
-- [ ] Java and Bedrock smoke tests cover joins. **Not performed — no client attaches to this
-      stack by design.** Per `PLUGIN_LIFECYCLE.md` §7 this is not a blocker; client behavior is a
-      tracked gate-12 play-test obligation, not a matrix result.
-- [x] `play.xpfarm.org` reaches the intended Java and Bedrock entry points.
-      Read-only production check, separate from the disposable stack: DNS `168.231.74.113`;
-      Java `25565` answered a real handshake (`Paper 26.1.2 | protocol 775`, 1 player online);
-      Bedrock UDP `19132` reachable.
-- [x] Ollama and Umami unavailable-endpoint tests keep the server and plugins available.
-      Neither service exists in this stack, so this is the negative path by construction. Both
-      self-disabled cleanly: `Ollama integration is disabled; no API client or listeners were
-      started.` and `Umami analytics is disabled; no tracking listeners or network clients were
-      started.` Server stayed healthy (`list` responded) with all 12 enabled.
-
-This plugin's row: the updater reported `Ollama: installed v0.2.1` from the published release
-asset and Paper enabled it alongside the other 11. `--from-releases` was used deliberately — it
-installs the real published assets through the real updater, so this is what production installs.
-
-Co-resident: AguaDeFlorida 2.0.0, CopperKingdom 0.2.1, TheCurse 0.2.2, DeathDepot 1.1.1, ElectricFurnace 0.2.1, GlutenFreeBread 1.1.3, StarterPack 1.1.2, TimberBlast 1.0.0, Umami 1.1.1, WildWeatherUpdate 1.0.2, WorldCRUD 1.1.2.
-
-Zero exceptions, SEVERE lines, or enable failures attributable to any plugin. No secrets in any
-log line. Stack torn down with `matrix down`; lease released, no orphaned containers.
-
-## 8. CI/CD — PARTIAL (observed)
-
-- [x] Identical standard plugin Actions workflow is installed. **Observed:**
-      `.github/workflows/build.yml` is **byte-identical** to the workflow in `copper-kingdom`,
-      `death-depot`, `umami`, and `curse` — md5 `df37a4e433a45b4cc999e14bb5997184` on all five,
-      checked 2026-07-21. It triggers on `push` to `main`, `push` of `v*` tags, `pull_request` to
-      `main`, and `workflow_dispatch`; builds with `temurin` Java `25`; runs
-      `mvn --batch-mode --no-transfer-progress clean verify`; writes bare-filename `SHA256SUMS.txt`;
-      and uploads release assets only for `refs/tags/v`.
-- [ ] Successful main Actions run is recorded before tagging. **NOT RECORDED per release in this
-      repository.** `CURRENT_STATE.md` states the tag and `main`-branch runs observed on
-      `2026-07-19` were successful for all ten repositories, covering this repo at `v0.2.1` — but
-      that is an ecosystem-wide observation of *outcome*, not a record that a green `main` run
-      *preceded* each tag.
-- [x] Workflow permissions contain no broader access than the documented contract. **Observed:**
-      exactly `permissions: contents: write` at the top level, no job-level escalation, and the
-      only token used is `GH_TOKEN: ${{ github.token }}` for `gh release`.
-
-## 9. Release — `v0.2.1` published; asset verification NOT RE-DONE here
-
-- [x] Semantic version matches the POM, plugin metadata, and `v<version>` tag. **Observed today:**
-      `pom.xml` `<version>0.2.1</version>`, `plugin.yml` `version: 0.2.1`, newest tag `v0.2.1` —
-      all three agree. But see the version-drift hazard in gate 3: `plugin.yml` hardcodes the
-      value instead of interpolating `${project.version}`, so this agreement is coincidental
-      maintenance, not a structural guarantee. Tags present: `v0.2.0`, `v0.2.1`.
-- [x] Successful tag Actions run and GitHub release are recorded. **Cited, not re-verified.**
-      `CURRENT_STATE.md` lists Ollama at release `v0.2.1` and records successful tag and `main`
-      runs observed on 2026-07-19. GitHub was not queried for this backfill.
-- [ ] Release contains exactly one updater-matching JAR plus `SHA256SUMS.txt` and no `original-*`
-      JAR. **NOT VERIFIED here.** Published assets were not downloaded or listed. Indirect support
-      only: the workflow's `! -name 'original-*'` filters, and the matrix run's checksum match.
-- [ ] Downloaded release assets pass `sha256sum --check SHA256SUMS.txt`. **NOT RUN here.**
-
-## 10. Updater — enrolled (observed); behaviors NOT RUN
-
-- [x] Updater manifest covers repository, destination, anchored asset regex, legacy globs, enabled
-      state, and optional pin. **Observed** in `minecraft-plugin-updater/plugins.json`:
-
-      ```json
-      {"name": "Ollama", "repo": "carmelosantana/minecraft-ollama", "destination": "ollama.jar", "asset_regex": "^ollama-[0-9].*\\.jar$", "legacy_globs": ["ollama-[0-9]*.jar"]}
-      ```
-
-      The regex is anchored at both ends. `enabled` is **absent, which means true**. There is **no
-      version pin**. So this plugin **does install and enable on every fresh volume**, even though
-      it is an external-service integration that ships dormant — `CURRENT_STATE.md` makes the same
-      point ("nothing ships disabled"). No manifest change is proposed by this backfill.
-- [ ] Fresh install, upgrade, no-op, legacy archival, endpoint failure, and checksum failure
-      behaviors pass. **NOT RUN for this plugin.** The 2026-07-19 matrix exercised *fresh install*
-      of this entry as a side effect; the other five behaviors were never tested per-plugin.
+- [ ] Updater manifest/tests cover repository, destination, anchored asset regex, legacy globs, enabled state, and optional pin.
+- [ ] Fresh install, upgrade, no-op, legacy archival, endpoint failure, and checksum failure behaviors pass.
 - [ ] Updater dry-run uses a disposable directory and never a production plugin directory.
-      **NOT RUN.**
 - [ ] Failure retains the installed JAR and default fail-open behavior permits Minecraft startup.
-      **NOT RUN for this plugin.**
 
-## 11. Deployment — NOT RECORDED
+## 11. Deployment
 
-- [ ] Dokploy redeployment notes identify the full recreation used to rerun the one-shot updater.
-      **NOT RECORDED.**
-- [ ] Updater completion, Minecraft startup, destination JAR, and stack/plugin logs were inspected.
-      **NOT RECORDED.**
-- [ ] No production plugin hot reload was used. **UNKNOWN** — no deployment record exists for this
-      plugin at any version.
+Not a gate. Deployment is updater pickup: a verified release plus a correct manifest entry is all
+this lifecycle owes. Leaving this section entirely unticked is the normal resting state and blocks
+nothing — not release, not enrolment, not handoff.
 
-No deployment was performed by this backfill, and this workstation has no Dokploy access, so no
-production log could be inspected even in principle. **Whether a production Ollama endpoint is
-configured on `play.xpfarm.org`, and therefore whether this plugin is dormant or live there, is
-completely unknown from this repository.**
+- [ ] Enrolment confirmed live and correct: release sound, manifest entry on `origin/main`, gate 10 genuinely completed.
+- [ ] Deployment evidence recorded, if and only if an operator relayed some. Otherwise note "enrolled, not known to be deployed" and leave unticked.
 
-**Rollback:** untested. The prior tag is `v0.2.0`. Note the cheapest mitigation for this specific
-plugin is not a rollback at all — setting `enabled: false` returns it to dormancy — but that has
-not been rehearsed in production either.
+## 12. Handoff
 
-## 12. Handoff — PARTIAL
-
-- [ ] Current-state documentation refreshed with release, CI, updater, deployment, and local
-      pending state. **NOT DONE by this backfill** — `xpfarm-plugin-toolkit/CURRENT_STATE.md` was
-      deliberately left untouched. It already flags this repo as one of four carrying no gate 7a
-      checklist record; that flag is now stale in this repo's favour.
-- [x] Known limitations, skipped checks, migration notes, rollback guidance, and follow-up owner
-      are recorded. This file is that record. Owner: Carmelo Santana.
-- [x] Evidence distinguishes source commit, published tag/release, updater state, and deployed
-      state without exposing secrets. Source: `test/docker-rig-consolidation`, **local and
-      unpushed** — including the `scripts/extra-services.yml` overlay that fixes the compose
-      defects above. Published: `v0.2.1`. Updater: enrolled, unpinned, enabled. Deployed:
-      **unknown**.
-
-**Follow-ups, in priority order:**
-
-1. Exercise `/ollama` end to end against the sidecar with `enabled: true` — generation, chat, the
-   blocked-command list, and the rate limiter. Gate 7a currently proves only that a **dormant**
-   plugin's `onEnable()` does not throw.
-2. Review the four permissions that default to `true` for every player (`ollama.use`,
-   `ollama.generate`, `ollama.code`, `ollama.chat`) and record a rationale or tighten them.
-3. Resolve the `com.carmelosantana` vs `org.xpfarm` coordinate split, or document the compatibility
-   decision (gate 3).
-4. Change `plugin.yml` to `version: '${project.version}'` to remove the drift hazard (gate 3).
-5. Perform the Geyser/Floodgate/ViaVersion Bedrock-safety review for chat and command input
-   (gate 4).
-6. Inspect the shaded release JAR, confirm the relocations landed, and run a secrets scan
-   (gates 3 and 6).
-7. Establish and record the deployed state, including whether an endpoint is configured (gate 11).
+- [ ] Current-state documentation refreshed with release, CI, updater, deployment, and local pending state.
+- [ ] Known limitations, skipped checks, configuration or migration notes, rollback guidance, and follow-up owner are recorded.
+- [ ] Evidence distinguishes source commit, published tag/release, updater state, and deployed state without exposing secrets.
+- [ ] Client play-test obligation recorded with a named owner and a target date: `<owner>` / `<date>`.
+- [ ] Client play-test outcome recorded once performed, covering Java join, Bedrock join, and any form, inventory, or rendered item behavior this plugin introduces. Leave unchecked with the owner and date above until the team has run it; an unchecked box here does not block a release, but an unrecorded obligation is a gate 12 failure.
+- [ ] Public deployment reachability confirmed during that pass: `play.xpfarm.org` reaches the intended Java and Bedrock entry points.
