@@ -129,11 +129,27 @@ Commit Part A **separately** from Part B.
 **Files:**
 - Modify: `pom.xml`
 - Modify: `src/main/resources/plugin.yml`
+- Modify: `README.md`
 - Test: `src/test/java/org/xpfarm/ollama/PluginDescriptorTest.java`
 
 **Interfaces:**
 - Consumes: nothing.
 - Produces: `${project.version}` substitution in `target/classes/plugin.yml`; Maven group `org.xpfarm`.
+
+**The `minecraft-plugin-scaffold` skill governs this task** (gates 2 and 3). Three of its
+requirements are not in the design doc's 0.3.0 table and are folded in here:
+
+1. `pom.xml` must name Carmelo Santana as author/developer — there is currently no `<developers>`
+   block at all.
+2. `play.xpfarm.org` must be documented "wherever this repository records server identity for a
+   player or operator — typically the `README.md`'s join/connection instructions." Verified
+   2026-07-22 that it appears nowhere in this repository outside checklist prose.
+3. Maven license metadata must be consistent with `LICENSE`. Verified 2026-07-22: `LICENSE` is
+   AGPL-3.0 full text and `pom.xml` already declares AGPL-3.0-or-later. No change needed — record
+   it, do not edit it.
+
+The skill's `herobrinesystems` scan was run 2026-07-22 and is clean: the only hits are the checklist
+lines that *describe* the check. Do not "fix" those.
 
 **Critical context — read before starting.** `pom.xml` currently has **no `<resources>` block**, so
 Maven resource filtering is OFF. Writing `version: '${project.version}'` into `plugin.yml` without
@@ -226,6 +242,18 @@ Change `<url>` (line 22):
     <url>https://xpfarm.org</url>
 ```
 
+Add a `<developers>` block immediately after `<url>` — `minecraft-plugin-scaffold` gate 3 requires
+author metadata and the POM currently has none:
+
+```xml
+    <developers>
+        <developer>
+            <name>Carmelo Santana</name>
+            <url>https://xpfarm.org</url>
+        </developer>
+    </developers>
+```
+
 Add a `<resources>` block as the **first** child of `<build>`, before `<plugins>`:
 
 ```xml
@@ -251,6 +279,27 @@ POM is a false claim about the build. The element becomes:
                 <version>3.14.1</version>
             </plugin>
 ```
+
+- [ ] **Step 4b: Record `play.xpfarm.org` in `README.md`**
+
+`minecraft-plugin-scaffold` gate 3 requires the public server hostname to be documented where the
+repository records server identity for a player or operator. This repository has no such section
+today, so add one immediately after the top-of-file description paragraph, before `## Features`:
+
+```markdown
+## Server
+
+The public xpfarm.org Minecraft server is `play.xpfarm.org` — Java Edition and, via Geyser and
+Floodgate, Bedrock Edition. Whether this plugin is enabled there is a deployment question, not a
+property of this repository: it ships `enabled: false` and does nothing until an operator turns it
+on and points it at a reachable Ollama endpoint.
+
+Project home: <https://xpfarm.org>
+```
+
+The second sentence is load-bearing. This plugin is enrolled in the updater but ships disabled, so
+a bare "our server is play.xpfarm.org" line in a plugin README would imply a live integration that
+has never been confirmed to exist.
 
 - [ ] **Step 5: Run the tests to verify they pass, against the filtered copy**
 
@@ -284,7 +333,8 @@ before committing.
 ```bash
 export PATH="$HOME/.sdkman/candidates/maven/current/bin:$HOME/.sdkman/candidates/java/current/bin:$PATH"
 mvn --batch-mode --no-transfer-progress clean verify
-git add pom.xml src/main/resources/plugin.yml src/test/java/org/xpfarm/ollama/PluginDescriptorTest.java
+git add pom.xml src/main/resources/plugin.yml README.md \
+        src/test/java/org/xpfarm/ollama/PluginDescriptorTest.java
 git commit -m "chore: move to org.xpfarm group and correct plugin descriptor metadata
 
 groupId com.carmelosantana -> org.xpfarm, closing the group/package split the
@@ -2450,10 +2500,13 @@ plan. Record under gate 3 (or the nearest relevant gate) these dated notes:
   rejected the descriptor with `InvalidDescriptionException` — the plugin would have been absent
   from `/plugins` rather than present-and-disabled. Not in the design doc's 0.3.0 table; it is a
   prerequisite the table's `version: '${project.version}'` row silently depended on.
-- **`play.xpfarm.org` still appears nowhere in this repository.** The gate 3 box for it stays
-  unticked. This plugin has no server-identity documentation surface to record it in — no
-  connection instructions, no server list. Recording it in `README.md` purely to tick a box would
-  be inventing a claim. Carried forward for whoever adds player-facing docs.
+- **`play.xpfarm.org` is now recorded** in a new `## Server` section of `README.md`, per
+  `minecraft-plugin-scaffold` gate 3, which requires the hostname wherever a repository documents
+  server identity. It had appeared nowhere in this repository outside checklist prose. The section
+  states explicitly that the plugin ships `enabled: false`, so the entry documents the server
+  without implying a live integration that has never been confirmed.
+- **`pom.xml` gained a `<developers>` block.** Gate 3 requires author metadata and the POM had
+  none. Not in the design doc's 0.3.0 table.
 - **Acceptance check 3 is implemented conditionally.** As worded it says `think` is present in
   *every* chat and generate body, which cannot hold alongside check 4 and Finding 2 — sending the
   field to a model without the thinking capability is a hard 400. It is implemented as "present
