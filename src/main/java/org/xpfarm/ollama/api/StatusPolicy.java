@@ -30,6 +30,17 @@ public final class StatusPolicy {
 
     private StatusPolicy() {}
 
+    /**
+     * Maps a <strong>non-200</strong> status to the action the client should take.
+     *
+     * <p>Only meaningful for statuses that represent a failure. There is no success constant in
+     * {@link Action}, so {@code forStatus(200)} returns {@link Action#SERVER_ERROR} via the default
+     * branch — a success would be misreported as a server fault. Callers must therefore check for
+     * 200 themselves and only consult this method once they know the exchange failed.
+     *
+     * @param status an HTTP status code other than 200
+     * @return the action for that status; unmapped codes fall back to {@link Action#SERVER_ERROR}
+     */
     public static Action forStatus(int status) {
         return switch (status) {
             case 400 -> Action.MALFORMED_REQUEST;
