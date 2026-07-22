@@ -239,35 +239,90 @@ General:
 
 ## 2. Repository
 
-- [ ] Repository is `carmelosantana/minecraft-ollama` with an SSH `origin` and `main` branch.
-- [ ] Existing user-owned worktree changes were identified and preserved.
-- [ ] No `herobrinesystems` references remain in source, metadata, workflows, remotes, or documentation.
+- [x] Repository is `carmelosantana/minecraft-ollama` with an SSH `origin` and `main` branch.
+      `git remote -v` → `origin git@github.com:carmelosantana/minecraft-ollama.git (fetch/push)`.
+      0.3.0 work is on branch `feat/api-currency`, an isolated worktree off local
+      `feat/llama-companion`, not `main` — not pushed, tagged, or released by this cycle.
+- [x] Existing user-owned worktree changes were identified and preserved. The main checkout at
+      `.../Plugins/ollama` is held by a concurrent 0.4.0 agent and was left provably untouched:
+      it stayed clean at `ae09bbb` throughout (verified at start and end). The in-flight
+      `PluginDescriptorTest` and `plugin.yml` quoting recorded at `ae09bbb` are the base this
+      branch built on.
+- [x] No `herobrinesystems` references remain in source, metadata, workflows, remotes, or
+      documentation. `rg -n 'herobrinesystems' . -g '!target/**' -g '!.git/**'` returns only the
+      two checklist lines that *describe* this check — no reference in any shipped artifact.
 
 ## 3. Metadata
 
-- [ ] AGPL-3.0-or-later `LICENSE` and Maven license metadata are present and consistent.
-- [ ] `https://xpfarm.org` metadata and Carmelo Santana author metadata are present.
-- [ ] `play.xpfarm.org` is recorded as the public Minecraft server hostname where server identity is documented.
-- [ ] New work uses the `org.xpfarm` Maven group, or an existing-coordinate compatibility decision is documented.
-- [ ] Repository slug, artifact, releasable JAR, updater destination, and `plugin.yml` names are consistent.
-- [ ] No secrets committed in source, defaults, tests, logs, history, or documentation.
+- [x] AGPL-3.0-or-later `LICENSE` and Maven license metadata are present and consistent. `LICENSE`
+      is the full AGPL-3.0 text; `pom.xml` declares `<name>GNU Affero General Public License v3.0
+      or later</name>` pointing at `https://www.gnu.org/licenses/agpl-3.0.html`. Unchanged by
+      0.3.0; verified consistent.
+- [x] `https://xpfarm.org` metadata and Carmelo Santana author metadata are present. `pom.xml`
+      `<url>https://xpfarm.org</url>` and a new `<developers>` block naming Carmelo Santana;
+      `plugin.yml` `website: https://xpfarm.org` and `author: Carmelo Santana`. The POM previously
+      had no `<developers>` block at all (added to satisfy `minecraft-plugin-scaffold` gate 3).
+- [x] `play.xpfarm.org` is recorded as the public Minecraft server hostname where server identity is
+      documented. Added to a new `## Server` section of `README.md`. It had appeared nowhere in the
+      repository outside checklist prose. The section states the plugin ships `enabled: false`, so
+      the hostname is documented without implying a live integration that has never been confirmed.
+- [x] New work uses the `org.xpfarm` Maven group. `pom.xml` `<groupId>org.xpfarm</groupId>`, moved
+      from `com.carmelosantana`, closing the group/package split the 0.2.1 backfill recorded as its
+      follow-up 3. `artifactId`, JAR name, and updater destination are unchanged, so the updater
+      manifest needs no edit.
+- [x] Repository slug, artifact, releasable JAR, updater destination, and `plugin.yml` names are
+      consistent. Slug `ollama`; `pom.xml` `<artifactId>ollama</artifactId>`; releasable JAR
+      `ollama-0.3.0.jar`; updater destination `ollama.jar`; `plugin.yml` `name: Ollama`,
+      `main: org.xpfarm.ollama.OllamaPlugin`. Confirmed against the built JAR's embedded descriptor.
+- [x] No secrets committed in source, defaults, tests, logs, history, or documentation. `config.yml`
+      has no credential field; the endpoint is a localhost default. Reviewed across all 0.3.0 diffs.
 
-**Planned in 0.3.0, from the gate 1 interview** — carried here so gate 3 does not rediscover them:
+**0.3.0 divergences and findings** — recorded here rather than silently absorbed:
 
-- `groupId` moves `com.carmelosantana` → `org.xpfarm`, resolving the group/package split the 0.2.1
-  backfill recorded as an open inconsistency (its follow-up 3). `artifactId`, JAR name, and updater
-  destination are unchanged, so the updater manifest needs no edit.
-- `plugin.yml` `version:` becomes `'${project.version}'`, removing the drift hazard the backfill
-  recorded — today the value is hardcoded and happens to match.
-- `pom.xml` `<url>` and `plugin.yml` `website:` still point at the GitHub repository rather than
-  `https://xpfarm.org`; `play.xpfarm.org` appears nowhere in this repository. Both were unchecked in
-  the backfill and remain to be addressed.
+- **Maven resource filtering had to be turned on, then narrowed.** `pom.xml` had no `<resources>`
+  block, so `version: '${project.version}'` would have shipped as a literal string and Paper would
+  have rejected the descriptor with `InvalidDescriptionException` — the plugin absent from
+  `/plugins` rather than present-and-disabled. Filtering was enabled (Task A1) and then narrowed
+  (Task B5) to `plugin.yml` only, because the `ollama-*.md` files are LLM system-prompt templates
+  and a future `${...}` in one would otherwise be silently mangled at build time. Verified: the
+  four `ollama-*.md` and `config.yml` are byte-identical between source and `target/classes`; only
+  `plugin.yml` is substituted. Neither step is in the design doc's 0.3.0 table; the table's
+  `version: '${project.version}'` row silently depended on the first.
+- **The compiler plugin's `<source>21</source><target>21</target>` was removed.** It was dead:
+  `maven.compiler.release=25` already took precedence, confirmed by `javap` reporting
+  `major version: 69` on the pre-change build. Leaving it would have left a false claim about the
+  build in the POM.
+- **`performance.max_concurrent_requests` default changed `5` → `1`** and now drives the concurrency
+  gate. `OLLAMA_NUM_PARALLEL` defaults to 1, and a warm model does not 503 when overloaded — it
+  stalls on an internal semaphore indefinitely, so a default of 5 would stall four requests rather
+  than refuse them. `config.yml` documents that operators must raise `OLLAMA_NUM_PARALLEL` to match.
+- **Retry reconciliation:** `api.max_retries` is a ceiling; the per-status cap narrows it. 500
+  retries at most once (Ollama self-heals OOM by evicting models), 503 uses the full budget, and
+  `max_retries: 0` disables retries everywhere. An overall deadline also bounds a 503 loop to
+  roughly `2 × api.timeout` so it cannot hold the concurrency gate for `(retries+1) × timeout`.
+- **Acceptance check 3 is implemented conditionally.** As worded it says `think` is present in
+  *every* chat and generate body, which cannot hold alongside check 4 and Finding 2 — sending the
+  field to a model without the thinking capability is a hard 400. It is implemented as "present
+  whenever `/api/show` reports the model thinking-capable", and omitted otherwise, including when
+  the probe fails. Omission is the pre-0.3.0 wire format, so a probe outage cannot regress it.
 
 ## 4. Compatibility
 
-- [ ] Java 25/Paper 26.1.2 build 74 compile succeeds and `plugin.yml` uses `api-version: '26.1'`, matching the API compiled against (see `PLUGIN_LIFECYCLE.md` §4 — a lower value opts the JAR into Paper's `Commodore` bytecode rewrites).
-- [ ] Hard dependencies, soft dependencies, optional APIs, and load ordering were reviewed and declared.
-- [ ] Geyser/Floodgate/ViaVersion review covers Bedrock-safe input, UI, inventory, identity, and protocol behavior.
+- [x] Java 25/Paper 26.1.2 build 74 compile succeeds and `plugin.yml` uses `api-version: '26.1'`,
+      matching the API compiled against. `mvn clean verify` → `BUILD SUCCESS`; the embedded
+      descriptor in `target/ollama-0.3.0.jar` reads `api-version: '26.1'` (quoted String, not the
+      old `'1.21'`). Compiled bytecode is `major version: 69` (Java 25) via `javap`.
+- [x] Hard dependencies, soft dependencies, optional APIs, and load ordering were reviewed and
+      declared. No hard dependencies. `softdepend: [ViaVersion]` retained for load ordering. Apache
+      HttpClient was removed as a bundled dependency (0 `org/apache/http` classes in the shaded
+      JAR); Gson 2.14.0 remains, shade-relocated to `org.xpfarm.ollama.libs.gson` (230 classes).
+- [ ] Geyser/Floodgate/ViaVersion review covers Bedrock-safe input, UI, inventory, identity, and
+      protocol behavior. **Unchecked:** the review performed 2026-07-22 covers the *planned* 0.4.0
+      Bedrock surface (dialogs, interaction, recipes), and 0.3.0 ships none of it — 0.3.0 adds no
+      new player-facing or Bedrock-facing surface. Gate 4 ticks this when the 0.4.0 code exists and
+      matches. **The ViaVersion documentation fact this review established IS discharged by 0.3.0:**
+      `README.md` now documents ViaVersion as a hard runtime requirement, not an optional soft
+      dependency.
 
 **The Bedrock review the 0.2.1 backfill recorded as "NEVER PERFORMED" was performed on 2026-07-22**
 as part of gate 1 research, against Geyser and Floodgate sources at `master` and the decompiled
@@ -288,16 +343,48 @@ exists and matches. Three facts it established that bind implementation:
 
 ## 5. External services
 
-- [ ] External integrations are disabled by default or require explicit configuration and have bounded timeouts.
-- [ ] Ollama/Umami-style external endpoints are optional and failure-tolerant when applicable.
-- [ ] Endpoint failure cannot fail server/plugin startup, and diagnostics redact secrets.
+- [x] External integrations are disabled by default or require explicit configuration and have
+      bounded timeouts. `enabled: false` by default (`config.yml`). 0.3.0 makes `api.timeout` real:
+      it was read and never applied, so a stalled Ollama pinned an executor thread forever. It is
+      now applied structurally on every request path — the single `newRequest()` factory always
+      sets `.timeout(...)`, covered by `OllamaHttpTest.timeoutAbortsRatherThanPinningTheThread` and
+      `aGetCarriesTheTimeoutToo`. A client-side concurrency gate additionally bounds load.
+- [x] Ollama endpoint is optional and failure-tolerant. With the endpoint unreachable, a request
+      surfaces an error `GenerateResponse`/`ChatResponse` (never a dropped callback), the model
+      preload logs and continues, and the capability probe degrades to "unknown" (omit `think`)
+      rather than throwing. Covered by `OllamaHttpTest` (refused-connection, timeout) and
+      `ModelCapabilitiesTest` (unreachable-endpoint, 200-non-JSON).
+- [x] Endpoint failure cannot fail server/plugin startup, and diagnostics redact secrets.
+      `onEnable()` early-returns when `enabled: false`; `preload()` and `testConnection()` run on
+      the executor and never throw on the main thread. Player-facing messages carry no endpoint URL,
+      body, or stack trace — pinned by a test looping `StatusPolicy.Action.values()` asserting no
+      message contains `http://`, `://`, `/api/`, `localhost`, `127.0.0.1`, or `Exception`, and by a
+      test asserting a really-thrown `OllamaHttpException.getPlayerMessage()` is clean while its
+      `getMessage()` detail (server-log only) may carry the URI.
 
 ## 6. Tests and build
 
-- [ ] Unit tests cover separable logic, configuration, serialization, permissions, and failure paths where applicable.
-- [ ] `PluginDescriptorTest` parses `plugin.yml` and `config.yml` with SnakeYAML and asserts `name`, `main`, a `String`-typed `api-version`, a fully-substituted `version`, every command the code looks up, every permission the code checks, and the declared soft dependencies.
-- [ ] `mvn --batch-mode --no-transfer-progress clean verify` succeeds.
-- [ ] The shaded releasable JAR and embedded `plugin.yml` were inspected; `original-*` JARs are excluded.
+- [x] Unit tests cover separable logic, configuration, serialization, permissions, and failure
+      paths. 67 tests, up from 12 at the 0.2.1 baseline: `StatusPolicyTest` (status→action mapping,
+      retry budget), `ChatRequestSerializationTest`/`GenerateRequestSerializationTest` (the
+      system-prompt fix, `think` gating, `format` as object, `done_reason`), `OllamaHttpTest`
+      (timeout, concurrency gate, retry, deadline, ungated metadata, malformed URI, no-leak),
+      `ModelCapabilitiesTest` (per-model cache, unknown-not-cached, 200-non-JSON),
+      `OllamaAPIThinkGatingThreadTest` (probe runs off the main thread), plus `OllamaAPITest` and
+      `PluginDescriptorTest`.
+- [x] `PluginDescriptorTest` parses `plugin.yml` and `config.yml` with SnakeYAML and asserts
+      `name`, `main`, a `String`-typed `api-version` (now `'26.1'`), a fully-substituted `version`
+      (asserts no `${` survives), the `website`, every command, every permission, and the soft
+      dependencies. It reads the Maven-filtered `target/classes/plugin.yml` in preference to source,
+      so the `version` assertion *is* the filtering proof.
+- [x] `mvn --batch-mode --no-transfer-progress clean verify` succeeds. Final: `Tests run: 67,
+      Failures: 0, Errors: 0, Skipped: 0` → `BUILD SUCCESS`.
+- [x] The shaded releasable JAR and embedded `plugin.yml` were inspected; `original-*` JARs are
+      excluded. `unzip -p target/ollama-0.3.0.jar plugin.yml` shows `version: '0.3.0'` and
+      `api-version: '26.1'` fully substituted; 0 `org/apache/http` classes; 230 relocated Gson
+      classes. A `target/original-ollama-0.3.0.jar` exists as normal maven-shade output but is
+      excluded from the release by `.github/workflows/build.yml` (`! -name 'original-*'` in the
+      SHA256SUMS step, the upload-artifact glob, and the `gh release upload` find — verified).
 
 ## 7. Matrix
 

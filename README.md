@@ -37,8 +37,12 @@ Project home: <https://xpfarm.org>
 
 ### Prerequisites
 - Java 25+
-- Minecraft Paper 26.1.2+
-- [Ollama](https://ollama.com) running locally
+- Minecraft Paper 26.1.2+ (this is Minecraft Java **26.1** — Mojang moved to `YY.D[.H]` versioning
+  in 2026 and 26.1 succeeded the 1.21 line)
+- **ViaVersion — required, not optional.** Geyser emulates a Java 26.2 client against a 26.1.2
+  server, and ViaVersion is what bridges that gap. It is declared as `softdepend` for load ordering
+  only; Bedrock players cannot connect without it installed.
+- [Ollama](https://ollama.com) running and reachable, if you want generation
 
 ### Installation
 
@@ -86,7 +90,7 @@ chat:
 
 # Command Execution
 commands:
-  enable_execution: true
+  enable_execution: false
   blocked_commands:
     - "stop"
     - "op"
@@ -94,13 +98,22 @@ commands:
 
 # Performance
 performance:
-  max_concurrent_requests: 5
+  max_concurrent_requests: 1
   rate_limit: 10
 
 # Debug
 debug:
   enabled: false
 ```
+
+### Concurrency
+
+`performance.max_concurrent_requests` defaults to `1`, matching Ollama's own `OLLAMA_NUM_PARALLEL`
+default. Raise both together or neither: an already-loaded Ollama model does not reject surplus
+requests, it blocks them on an internal semaphore indefinitely, so a higher client-side limit
+converts "refused immediately" into "stalled until `api.timeout` fires". Requests beyond the limit
+get an immediate message instead of a hang. Changing this value takes effect on server restart, not
+on `/ollama reload`.
 
 ## Usage Examples
 
