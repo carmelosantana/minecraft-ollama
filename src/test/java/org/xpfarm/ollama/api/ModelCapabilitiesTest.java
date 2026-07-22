@@ -119,6 +119,34 @@ final class ModelCapabilitiesTest {
     }
 
     @Test
+    void aTwoHundredWithAPlaintextBodyReportsUnknownRatherThanThrowing() {
+        showReturns(200, "Ollama is running");
+        assertNull(
+                new ModelCapabilities(http, Logger.getAnonymousLogger()).supportsThinking("qwen3"),
+                "a 200 with a non-JSON body must be 'unknown' (omit think), not an unchecked "
+                        + "JsonSyntaxException thrown onto the main thread");
+    }
+
+    @Test
+    void aTwoHundredWithAnHtmlBodyReportsUnknownRatherThanThrowing() {
+        showReturns(200, "<!DOCTYPE html><html><body><h1>502 Bad Gateway</h1></body></html>");
+        assertNull(
+                new ModelCapabilities(http, Logger.getAnonymousLogger()).supportsThinking("qwen3"),
+                "a 200 whose body is an HTML error page must degrade to 'unknown', not throw");
+    }
+
+    @Test
+    void aTwoHundredWithANonJsonBodyIsNotCachedAsAnAnswer() {
+        showReturns(200, "Ollama is running");
+        ModelCapabilities capabilities = new ModelCapabilities(http, Logger.getAnonymousLogger());
+
+        assertNull(capabilities.supportsThinking("qwen3"));
+        capabilities.supportsThinking("qwen3");
+        assertTrue(probes.get() >= 2,
+                "an unparseable-body probe was cached instead of being re-probed");
+    }
+
+    @Test
     void aProbeAgainstAnUnreachableEndpointReportsUnknownRatherThanThrowing() {
         OllamaHttp unreachable = new OllamaHttp(1, Logger.getAnonymousLogger());
         unreachable.configure("http://127.0.0.1:1", 2, 0);

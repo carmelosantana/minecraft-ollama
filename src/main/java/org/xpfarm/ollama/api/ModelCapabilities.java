@@ -3,6 +3,7 @@ package org.xpfarm.ollama.api;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -86,7 +87,13 @@ public final class ModelCapabilities {
             // from inside a gated generation would deadlock at the default of one permit.
             String response = http.post("/api/show", body.toString());
             return hasThinkingCapability(response);
-        } catch (OllamaHttpException e) {
+        } catch (OllamaHttpException | JsonParseException e) {
+            // OllamaHttpException: the request itself failed. JsonParseException: HTTP 200 with a
+            // body that is not JSON (reverse-proxy error page, captive portal, the plaintext
+            // "Ollama is running", or an unrelated HTTP service). Both are "unknown", not "no": we
+            // return null so the caller omits the 'think' field (the pre-0.3.0 wire format) and the
+            // model is re-probed next time. A parse failure must NOT be cached, exactly like the
+            // OllamaHttpException path.
             logger.log(Level.FINE,
                     "Could not probe capabilities for model {0}: {1}. Sending no 'think' field, "
                             + "which is the pre-0.3.0 behavior.",
