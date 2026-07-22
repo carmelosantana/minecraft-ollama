@@ -39,9 +39,12 @@ class OllamaAPITest {
                 .thenReturn("llama3.2");
         when(mockPlugin.getConfig().getInt("api.timeout", 30))
                 .thenReturn(30);
-        when(mockPlugin.getConfig().getInt("performance.max_concurrent_requests", 5))
-                .thenReturn(5);
-        
+        when(mockPlugin.getConfig().getInt("performance.max_concurrent_requests", 1))
+                .thenReturn(1);
+        when(mockPlugin.getConfig().getInt("api.max_retries", 3)).thenReturn(3);
+        // Unstubbed, getLogger() returns null and OllamaHttp/ModelCapabilities NPE on first log.
+        when(mockPlugin.getLogger()).thenReturn(java.util.logging.Logger.getAnonymousLogger());
+
         ollamaAPI = new OllamaAPI(mockPlugin);
     }
     
@@ -115,6 +118,19 @@ class OllamaAPITest {
     void testConfiguration() {
         assertEquals("llama3.2", ollamaAPI.getDefaultModel());
         assertEquals("http://localhost:11434", ollamaAPI.getEndpoint());
+    }
+
+    @Test
+    void theConcurrencyGateDefaultsToOneToMatchOllamaNumParallel() {
+        // The default passed to getInt() is the contract: OLLAMA_NUM_PARALLEL defaults to 1, and a
+        // warm model does not 503 when overloaded -- it stalls indefinitely. A client-side default
+        // of 5 would therefore stall 4 requests rather than refuse them.
+        verify(mockPlugin.getConfig()).getInt("performance.max_concurrent_requests", 1);
+    }
+
+    @Test
+    void maxRetriesIsActuallyReadFromConfig() {
+        verify(mockPlugin.getConfig()).getInt("api.max_retries", 3);
     }
     
     // Integration tests would require a running Ollama instance

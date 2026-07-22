@@ -74,9 +74,17 @@ commands:
 
 # Performance Settings
 performance:
-  # Maximum concurrent requests
-  max_concurrent_requests: 5
-  
+  # Maximum concurrent Ollama requests this plugin will have in flight.
+  #
+  # Keep this equal to the server's OLLAMA_NUM_PARALLEL, which itself defaults to 1. Raising this
+  # without raising OLLAMA_NUM_PARALLEL does not increase throughput: an already-loaded model does
+  # not reject surplus requests, it blocks them on an internal semaphore with no timeout, so the
+  # extra requests simply stall until this plugin's api.timeout fires. Requests beyond this limit
+  # are refused immediately with a message, which is the honest outcome.
+  #
+  # Changing this takes effect on server restart, not on /ollama reload.
+  max_concurrent_requests: 1
+
   # Rate limiting: requests per minute per player
   rate_limit: 10
   

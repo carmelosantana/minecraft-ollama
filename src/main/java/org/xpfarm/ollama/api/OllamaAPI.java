@@ -11,17 +11,9 @@ import org.xpfarm.ollama.api.models.ChatResponse;
 import org.xpfarm.ollama.api.models.ChatMessage;
 import org.xpfarm.ollama.events.OllamaRequestEvent;
 import org.xpfarm.ollama.events.OllamaResponseEvent;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.entity.StringEntity;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.util.EntityUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -32,58 +24,62 @@ import java.util.function.Consumer;
 import java.util.logging.Level;
 
 /**
- * Main API class for interacting with Ollama
- * 
- * This class provides methods for generating text, chat completions,
- * and managing the connection to the Ollama server.
- * 
+ * Bukkit-facing Ollama client.
+ *
+ * <p>All HTTP concerns — timeouts, the concurrency gate, retries, status dispatch — live in
+ * {@link OllamaHttp}, which has no Bukkit reference and is therefore testable. This class is the
+ * wiring: config, events, the async-to-main-thread hop, and {@code think} gating.
+ *
  * @author Carmelo Santana
  */
 public class OllamaAPI {
-    
+
     private final OllamaPlugin plugin;
     private final Gson gson;
     private final ExecutorService executorService;
-    private final CloseableHttpClient httpClient;
-    
+    private final OllamaHttp http;
+    private final ModelCapabilities capabilities;
+
     private String endpoint;
     private String defaultModel;
     private int timeout;
     private int maxRetries;
     private double defaultTemperature;
-    
-    /**
-     * Create a new OllamaAPI instance
-     * 
-     * @param plugin The plugin instance
-     */
+
     public OllamaAPI(OllamaPlugin plugin) {
         this.plugin = plugin;
         this.gson = new Gson();
-        this.executorService = Executors.newFixedThreadPool(
-            plugin.getConfig().getInt("performance.max_concurrent_requests", 5)
-        );
-        this.httpClient = HttpClients.createDefault();
-        
+
+        // Default 1, matching OLLAMA_NUM_PARALLEL. Per Finding 3 a warm model does not reject
+        // surplus requests, it blocks them indefinitely, so a higher client-side default would
+        // stall requests rather than refuse them. Operators who raised OLLAMA_NUM_PARALLEL raise
+        // this to match; see config.yml. Changing it needs a restart, not a /ollama reload.
+        int permits = plugin.getConfig().getInt("performance.max_concurrent_requests", 1);
+
+        // Headroom above the gate so an ungated metadata probe or a refused request still gets a
+        // thread promptly instead of queueing behind in-flight generations.
+        this.executorService = Executors.newFixedThreadPool(Math.max(1, permits) + 2);
+
+        this.http = new OllamaHttp(permits, plugin.getLogger());
+        this.capabilities = new ModelCapabilities(this.http, plugin.getLogger());
+
         loadConfig();
     }
-    
-    /**
-     * Load configuration from config.yml
-     */
+
     private void loadConfig() {
         this.endpoint = plugin.getConfig().getString("api.endpoint", "http://localhost:11434");
         this.defaultModel = plugin.getConfig().getString("api.model", "llama3.2");
         this.timeout = plugin.getConfig().getInt("api.timeout", 30);
         this.maxRetries = plugin.getConfig().getInt("api.max_retries", 3);
         this.defaultTemperature = plugin.getConfig().getDouble("api.temperature", 0.7);
+        // Both values were read and then never used before 0.3.0. This line is what makes them real.
+        this.http.configure(this.endpoint, this.timeout, this.maxRetries);
     }
-    
-    /**
-     * Reload configuration
-     */
+
     public void reloadConfig() {
         loadConfig();
+        // api.model may have changed, and a stale capability answer would gate 'think' wrongly.
+        this.capabilities.clear();
         plugin.debugLog("API configuration reloaded");
     }
     
@@ -94,34 +90,22 @@ public class OllamaAPI {
      */
     public void testConnection(BiConsumer<Boolean, String> callback) {
         CompletableFuture.runAsync(() -> {
+            String message;
+            boolean ok;
             try {
-                // Use GET request for version endpoint
-                HttpGet get = new HttpGet(endpoint + "/api/version");
-                get.setHeader("Accept", "application/json");
-                
-                CloseableHttpResponse response = httpClient.execute(get);
-                int statusCode = response.getStatusLine().getStatusCode();
-                
-                if (statusCode == 200) {
-                    String responseBody = EntityUtils.toString(response.getEntity());
-                    JsonObject json = JsonParser.parseString(responseBody).getAsJsonObject();
-                    String version = json.get("version").getAsString();
-                    
-                    Bukkit.getScheduler().runTask(plugin, () -> 
-                        callback.accept(true, "Connected to Ollama v" + version)
-                    );
-                } else {
-                    Bukkit.getScheduler().runTask(plugin, () -> 
-                        callback.accept(false, "HTTP " + statusCode)
-                    );
-                }
-                
-                response.close();
-            } catch (Exception e) {
-                Bukkit.getScheduler().runTask(plugin, () -> 
-                    callback.accept(false, e.getMessage())
-                );
+                JsonObject json = JsonParser.parseString(http.get("/api/version")).getAsJsonObject();
+                ok = true;
+                message = "Connected to Ollama v" + json.get("version").getAsString();
+            } catch (OllamaHttpException e) {
+                ok = false;
+                message = e.getPlayerMessage();
+            } catch (RuntimeException e) {
+                ok = false;
+                message = "Unexpected response from Ollama: " + e.getMessage();
             }
+            final boolean success = ok;
+            final String result = message;
+            Bukkit.getScheduler().runTask(plugin, () -> callback.accept(success, result));
         }, executorService);
     }
     
@@ -159,56 +143,42 @@ public class OllamaAPI {
      * @param player The player making the request (for context)
      * @param callback Callback with the generated response
      */
-    public void generateWithRequest(GenerateRequest request, Player player, Consumer<GenerateResponse> callback) {
-        // Fire request event
+    public void generateWithRequest(GenerateRequest request, Player player,
+            Consumer<GenerateResponse> callback) {
         OllamaRequestEvent requestEvent = new OllamaRequestEvent(player, request);
         Bukkit.getPluginManager().callEvent(requestEvent);
-        
         if (requestEvent.isCancelled()) {
             plugin.debugLog("Request cancelled by event");
             return;
         }
-        
+
+        if (request.getModel() == null) {
+            request.setModel(defaultModel);
+        }
+        applyThinkGating(request.getModel(), request::setThink);
+
         CompletableFuture.runAsync(() -> {
+            GenerateResponse result;
             try {
-                String jsonRequest = gson.toJson(request);
-                plugin.debugLog("Sending generate request: " + jsonRequest);
-                
-                HttpPost post = new HttpPost(endpoint + "/api/generate");
-                post.setHeader("Content-Type", "application/json");
-                post.setEntity(new StringEntity(jsonRequest));
-                
-                CloseableHttpResponse response = httpClient.execute(post);
-                String responseBody = EntityUtils.toString(response.getEntity());
-                
-                plugin.debugLog("Received response: " + responseBody);
-                
-                // Check response status
-                int statusCode = response.getStatusLine().getStatusCode();
-                if (statusCode != 200) {
-                    plugin.getLogger().warning("API returned status code: " + statusCode);
-                    plugin.getLogger().warning("Response body: " + responseBody);
-                }
-                
-                GenerateResponse generateResponse = gson.fromJson(responseBody, GenerateResponse.class);
-                
-                // Fire response event
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    OllamaResponseEvent responseEvent = new OllamaResponseEvent(player, generateResponse);
-                    Bukkit.getPluginManager().callEvent(responseEvent);
-                    
-                    callback.accept(generateResponse);
-                });
-                
-                response.close();
-            } catch (Exception e) {
+                String json = gson.toJson(request);
+                plugin.debugLog("Sending generate request: " + json);
+                String body = http.postGated("/api/generate", json);
+                plugin.debugLog("Received response: " + body);
+                result = gson.fromJson(body, GenerateResponse.class);
+            } catch (OllamaHttpException e) {
+                logFailure("generate", e);
+                result = new GenerateResponse();
+                result.setError(e.getPlayerMessage());
+            } catch (RuntimeException e) {
                 plugin.getLogger().log(Level.SEVERE, "Error generating text", e);
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    GenerateResponse errorResponse = new GenerateResponse();
-                    errorResponse.setError("Failed to generate text: " + e.getMessage());
-                    callback.accept(errorResponse);
-                });
+                result = new GenerateResponse();
+                result.setError("Failed to generate text: " + e.getMessage());
             }
+            final GenerateResponse delivered = result;
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                Bukkit.getPluginManager().callEvent(new OllamaResponseEvent(player, delivered));
+                callback.accept(delivered);
+            });
         }, executorService);
     }
     
@@ -247,55 +217,40 @@ public class OllamaAPI {
      * @param callback Callback with the chat response
      */
     public void chatWithRequest(ChatRequest request, Player player, Consumer<ChatResponse> callback) {
-        // Fire request event
         OllamaRequestEvent requestEvent = new OllamaRequestEvent(player, request);
         Bukkit.getPluginManager().callEvent(requestEvent);
-        
         if (requestEvent.isCancelled()) {
             plugin.debugLog("Chat request cancelled by event");
             return;
         }
-        
+
+        if (request.getModel() == null) {
+            request.setModel(defaultModel);
+        }
+        applyThinkGating(request.getModel(), request::setThink);
+
         CompletableFuture.runAsync(() -> {
+            ChatResponse result;
             try {
-                String jsonRequest = gson.toJson(request);
-                plugin.debugLog("Sending chat request: " + jsonRequest);
-                
-                HttpPost post = new HttpPost(endpoint + "/api/chat");
-                post.setHeader("Content-Type", "application/json");
-                post.setEntity(new StringEntity(jsonRequest));
-                
-                CloseableHttpResponse response = httpClient.execute(post);
-                String responseBody = EntityUtils.toString(response.getEntity());
-                
-                plugin.debugLog("Received chat response: " + responseBody);
-                
-                // Check response status
-                int statusCode = response.getStatusLine().getStatusCode();
-                if (statusCode != 200) {
-                    plugin.getLogger().warning("Chat API returned status code: " + statusCode);
-                    plugin.getLogger().warning("Response body: " + responseBody);
-                }
-                
-                ChatResponse chatResponse = gson.fromJson(responseBody, ChatResponse.class);
-                
-                // Fire response event
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    OllamaResponseEvent responseEvent = new OllamaResponseEvent(player, chatResponse);
-                    Bukkit.getPluginManager().callEvent(responseEvent);
-                    
-                    callback.accept(chatResponse);
-                });
-                
-                response.close();
-            } catch (Exception e) {
+                String json = gson.toJson(request);
+                plugin.debugLog("Sending chat request: " + json);
+                String body = http.postGated("/api/chat", json);
+                plugin.debugLog("Received chat response: " + body);
+                result = gson.fromJson(body, ChatResponse.class);
+            } catch (OllamaHttpException e) {
+                logFailure("chat", e);
+                result = new ChatResponse();
+                result.setError(e.getPlayerMessage());
+            } catch (RuntimeException e) {
                 plugin.getLogger().log(Level.SEVERE, "Error generating chat", e);
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    ChatResponse errorResponse = new ChatResponse();
-                    errorResponse.setError("Failed to generate chat: " + e.getMessage());
-                    callback.accept(errorResponse);
-                });
+                result = new ChatResponse();
+                result.setError("Failed to generate chat: " + e.getMessage());
             }
+            final ChatResponse delivered = result;
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                Bukkit.getPluginManager().callEvent(new OllamaResponseEvent(player, delivered));
+                callback.accept(delivered);
+            });
         }, executorService);
     }
     
@@ -371,15 +326,65 @@ public class OllamaAPI {
     }
     
     /**
+     * Sets {@code think} only when the model is known to be thinking-capable.
+     *
+     * <p>Capable → {@code false} explicitly, because since Ollama v0.12.4 omitting the field means
+     * {@code true} and we do not want to pay for reasoning tokens we discard. Not capable, or
+     * unknown → the field is left null and Gson omits it, because sending {@code think} to a model
+     * without the capability is a hard 400.
+     */
+    private void applyThinkGating(String model, Consumer<Boolean> setThink) {
+        setThink.accept(Boolean.TRUE.equals(capabilities.supportsThinking(model)) ? Boolean.FALSE
+                : null);
+    }
+
+    private void logFailure(String label, OllamaHttpException e) {
+        switch (e.getAction()) {
+            case MALFORMED_REQUEST ->
+                    plugin.getLogger().log(Level.SEVERE,
+                            "Ollama rejected the {0} request as malformed. This is a client bug, "
+                                    + "not an operator problem: {1}",
+                            new Object[] {label, e.getMessage()});
+            case MODEL_MISSING ->
+                    plugin.getLogger().log(Level.WARNING,
+                            "Model not installed on the Ollama server ({0}): {1}",
+                            new Object[] {label, e.getMessage()});
+            case CANCELLED -> plugin.debugLog(label + " request cancelled: " + e.getMessage());
+            default -> plugin.getLogger().log(Level.WARNING,
+                    "Ollama {0} request failed: {1}", new Object[] {label, e.getMessage()});
+        }
+    }
+
+    /**
+     * Loads the configured model and warms its capability answer, so a player's first message
+     * does not pay the cold-load cost. Never throws and never blocks the main thread; an
+     * unreachable endpoint here is a logged line and nothing more.
+     */
+    public void preload() {
+        CompletableFuture.runAsync(() -> {
+            capabilities.supportsThinking(defaultModel);
+            GenerateRequest request = new GenerateRequest();
+            request.setModel(defaultModel);
+            request.setPrompt("");
+            request.setStream(false);
+            try {
+                http.postGated("/api/generate", gson.toJson(request));
+                plugin.getLogger().info("Preloaded Ollama model " + defaultModel);
+            } catch (OllamaHttpException e) {
+                plugin.getLogger().info("Could not preload model " + defaultModel + ": "
+                        + e.getPlayerMessage() + " The first request will pay the load cost.");
+            } catch (RuntimeException e) {
+                plugin.getLogger().log(Level.FINE, "Preload failed", e);
+            }
+        }, executorService);
+    }
+
+    /**
      * Shutdown the API and clean up resources
      */
     public void shutdown() {
-        try {
-            executorService.shutdown();
-            httpClient.close();
-        } catch (IOException e) {
-            plugin.getLogger().log(Level.WARNING, "Error shutting down API", e);
-        }
+        executorService.shutdownNow();
+        http.close();
     }
     
     /**

@@ -120,6 +120,9 @@ public class OllamaPlugin extends JavaPlugin {
         
         // Test API connection
         testAPIConnection();
+
+        // Pay the cold-model-load cost at startup rather than on a player's first message.
+        ollamaAPI.preload();
     }
     
     /**
