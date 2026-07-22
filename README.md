@@ -2,6 +2,15 @@
 
 A Minecraft Paper plugin that provides an API wrapper for [Ollama](https://ollama.com), enabling players and other plugins to interact with large language models directly from within the game.
 
+## Server
+
+The public xpfarm.org Minecraft server is `play.xpfarm.org` — Java Edition and, via Geyser and
+Floodgate, Bedrock Edition. Whether this plugin is enabled there is a deployment question, not a
+property of this repository: it ships `enabled: false` and does nothing until an operator turns it
+on and points it at a reachable Ollama endpoint.
+
+Project home: <https://xpfarm.org>
+
 ## Features
 
 ### 🎮 Player Commands

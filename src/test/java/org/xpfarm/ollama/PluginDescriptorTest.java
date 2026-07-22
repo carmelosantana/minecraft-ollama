@@ -70,13 +70,23 @@ final class PluginDescriptorTest {
         assertEquals("org.xpfarm.ollama.OllamaPlugin", parsed.get("main"));
         assertInstanceOf(String.class, parsed.get("api-version"),
                 "api-version must be quoted; unquoted it parses as a double and 1.20 becomes 1.2");
-        assertEquals("1.21", parsed.get("api-version"));
+        assertEquals("26.1", parsed.get("api-version"),
+                "paper-api 26.1.2 is Minecraft Java 26.1; a lower value opts the JAR into "
+                        + "Paper's Commodore bytecode rewrites");
         assertNotNull(parsed.get("description"), "description is required");
 
         Object version = parsed.get("version");
         assertNotNull(version, "version is required");
         assertFalse(version.toString().contains("${"),
-                "version still holds an unresolved Maven property: " + version);
+                "version still holds an unresolved Maven property: " + version
+                        + " -- pom.xml needs <resources><resource><filtering>true");
+    }
+
+    @Test
+    void pluginYmlPointsAtTheProjectWebsite() throws IOException {
+        Object website = parse(PLUGIN_YML).get("website");
+        assertNotNull(website, "website is required");
+        assertEquals("https://xpfarm.org", website);
     }
 
     @Test
