@@ -14,6 +14,11 @@ commands:
     usage: /ollama <subcommand>
     permission: ollama.use
     permission-message: You don't have permission to use this command
+  llama:
+    description: Llama companion
+    usage: /llama <ask|recipe|dismiss|give>
+    permission: ollama.llama.use
+    permission-message: You don't have permission to use the llama companion
 
 permissions:
   ollama.use:
@@ -36,4 +41,10 @@ permissions:
     default: op
   ollama.debug:
     description: Allow debug commands
+    default: op
+  ollama.llama.use:
+    description: Craft, summon, and talk to a llama companion
+    default: true
+  ollama.llama.give:
+    description: Give a companion summon item to a player
     default: op
