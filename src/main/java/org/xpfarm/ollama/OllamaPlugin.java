@@ -6,6 +6,7 @@ import org.xpfarm.ollama.events.OllamaEventListener;
 import org.xpfarm.ollama.logging.PlayerLogManager;
 import org.xpfarm.ollama.chat.ChatSessionManager;
 import org.xpfarm.ollama.prompts.SystemPromptManager;
+import org.xpfarm.ollama.companion.CompanionManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -29,35 +30,40 @@ public class OllamaPlugin extends JavaPlugin {
     private PlayerLogManager logManager;
     private ChatSessionManager chatManager;
     private SystemPromptManager promptManager;
-    
+    private CompanionManager companionManager;
+
     @Override
     public void onEnable() {
         instance = this;
-        
+
         // Save default configuration
         saveDefaultConfig();
 
-        if (!getConfig().getBoolean("enabled", false)) {
+        boolean apiEnabled = getConfig().getBoolean("enabled", false);
+        if (apiEnabled) {
+            initializeComponents();
+            registerCommands();
+            registerEvents();
+            getLogger().info("Ollama Plugin v" + getDescription().getVersion() + " enabled!");
+            logStartupInfo();
+        } else {
             getLogger().info("Ollama integration is disabled; no API client or listeners were started.");
-            return;
         }
-        
-        // Initialize components
-        initializeComponents();
-        
-        // Register commands
-        registerCommands();
-        
-        // Register events
-        registerEvents();
-        
-        // Log startup message
-        getLogger().info("Ollama Plugin v" + getDescription().getVersion() + " enabled!");
-        logStartupInfo();
+
+        // The companion is gated by its own switch, not the API master switch: crafting, following,
+        // downing, and nudges work with Ollama off; only conversation needs the API and it degrades.
+        if (getConfig().getBoolean("companion.enabled", true)) {
+            companionManager = new CompanionManager(this);
+            companionManager.enable();
+        }
     }
-    
+
     @Override
     public void onDisable() {
+        if (companionManager != null) {
+            companionManager.disable();
+        }
+
         // Clean up resources
         if (chatManager != null) {
             chatManager.cleanup();
@@ -182,6 +188,15 @@ public class OllamaPlugin extends JavaPlugin {
      */
     public SystemPromptManager getPromptManager() {
         return promptManager;
+    }
+
+    /**
+     * Get the companion manager
+     *
+     * @return The companion manager
+     */
+    public CompanionManager getCompanionManager() {
+        return companionManager;
     }
     
     /**
