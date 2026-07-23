@@ -112,6 +112,23 @@ final class PluginDescriptorTest {
     }
 
     @Test
+    void declaresLlamaCommand() throws IOException {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> commands = (Map<String, Object>) parse(PLUGIN_YML).get("commands");
+        assertNotNull(commands, "commands section is required");
+        assertTrue(commands.containsKey("llama"), "plugin.yml must declare the llama command");
+    }
+
+    @Test
+    void declaresCompanionPermissions() throws IOException {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> permissions = (Map<String, Object>) parse(PLUGIN_YML).get("permissions");
+        assertNotNull(permissions, "permissions section is required");
+        assertTrue(permissions.containsKey("ollama.llama.use"), "ollama.llama.use must be declared");
+        assertTrue(permissions.containsKey("ollama.llama.give"), "ollama.llama.give must be declared");
+    }
+
+    @Test
     void pluginYmlDeclaresItsSoftDependencies() throws IOException {
         Object softdepend = parse(PLUGIN_YML).get("softdepend");
         assertNotNull(softdepend, "softdepend is required");

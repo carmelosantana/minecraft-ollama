@@ -112,3 +112,33 @@ integration:
   
   # Whether to broadcast events for other plugins
   broadcast_events: true
+
+# Llama Companion
+# Crafting, following, downed-recovery, and nudges work even when the top-level
+# `enabled` above is false or the Ollama endpoint is unreachable. Only the
+# conversation feature needs Ollama.
+companion:
+  # Master switch for the companion feature, independent of the Ollama `enabled` flag.
+  enabled: true
+
+  # Baseline damage immunity. Downed-recovery (return the summon item at lethal
+  # damage) is always active regardless of this value; this only blocks routine damage.
+  invulnerable: true
+
+  # Ticks between follow-path re-issues. Lower = tighter following, more pathfinding cost.
+  follow_interval: 10
+
+  # Blocks of separation before the companion teleports to catch up.
+  teleport_distance: 24
+
+  nudges:
+    # Unprompted, rule-based reminders. No Ollama call — instant and cannot hallucinate.
+    enabled: true
+    # Seconds between nudges, per player.
+    cooldown: 300
+    # Which rules are active. Unknown names are dropped with a logged warning.
+    rules:
+      - shield
+      - food
+      - tool_durability
+      - torches

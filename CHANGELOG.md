@@ -2,6 +2,48 @@
 
 All notable changes to Ollama are documented here.
 
+## 0.4.0 - 2026-07-22
+
+### Added
+
+- **A craftable llama companion.** Craft it from vanilla ingredients (white wool, lead, hay bale,
+  gold ingot — `/llama recipe` prints the shape), place the summon item, and a llama bound to you
+  appears, follows you across chunk boundaries and through nether portals, and can be talked to.
+- **Conversation backed by Ollama.** Right-click your companion to open a dialog (a Paper Dialog,
+  which Geyser auto-converts to a Bedrock form — no Geyser/Floodgate/Cumulus dependency), or use
+  `/llama ask <message>`. The companion carries a distinct personality via a leading
+  `role: "system"` message and sees **only the asking player's own state** (inventory, armor,
+  hands, health/hunger, biome, dimension, time) — never other players and never anyone's chat
+  history. Any command the model proposes is surfaced as click-to-prefill text and is **never
+  executed**.
+- **Downed, not dead.** At lethal damage the companion collapses and its summon item returns to
+  you rather than dying permanently; void damage teleports it back to you; `/kill` still removes it
+  for admins.
+- **Deterministic, LLM-free nudges.** The companion reminds you (once per cooldown, per player)
+  about a carried-but-unequipped shield, missing food, a tool about to break, or no torches — pure
+  rules, instant and incapable of hallucinating.
+- **Commands:** `/llama ask|recipe|dismiss|give`. `give` is op-gated (`ollama.llama.give`); the
+  rest use `ollama.llama.use` (default true).
+- **Config:** a new `companion:` block (`enabled`, `invulnerable`, `follow_interval`,
+  `teleport_distance`, and `nudges` with `enabled`, `cooldown`, `rules`).
+
+### Changed
+
+- **The companion is decoupled from the Ollama master switch.** Crafting, following, downed
+  recovery, and nudges work even when the top-level `enabled: false` or the endpoint is
+  unreachable; only conversation needs Ollama, and it degrades to an in-character line rather than
+  failing. `onEnable` initializes the companion whenever `companion.enabled` is true, independently
+  of `enabled`.
+
+### Notes
+
+- Conversation keeps its **own** per-player history, separate from `/ollama chat`'s session
+  manager, so the two personas never blend and no out-of-scope player data can leak into the
+  companion prompt.
+- Bedrock: custom recipes do not appear in the recipe book (hand-crafting still resolves
+  server-side; `/llama recipe` mitigates discoverability); dialog text inputs are single-line with
+  an explicit `max_length`; ViaVersion remains a hard runtime requirement.
+
 ## 0.3.0 - 2026-07-22
 
 ### Fixed
