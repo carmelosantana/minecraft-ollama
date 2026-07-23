@@ -447,18 +447,35 @@ stack with this repo's `scripts/extra-services.yml` Ollama sidecar.
   (which would exercise the `think: false` *positive* path) was not run — the omit-when-not-capable
   path was confirmed instead.
 
-## 8. CI/CD
+## 8. CI/CD — v0.3.0 verified 2026-07-23
 
-- [ ] Identical standard plugin Actions workflow is installed with the required triggers, Temurin 25 build, artifact, checksum, and release behavior.
-- [ ] Successful main Actions run is recorded before tagging.
-- [ ] Workflow permissions contain no broader access than the documented contract.
+- [x] Identical standard plugin Actions workflow is installed with the required triggers, Temurin 25
+      build, artifact, checksum, and release behavior. `.github/workflows/build.yml` triggers on
+      `push` to `main`, `push` of `v*` tags, `pull_request` to `main`, and `workflow_dispatch`;
+      builds with Temurin Java 25; runs `mvn clean verify`; writes `SHA256SUMS.txt`; uploads release
+      assets only on `refs/tags/v` with `! -name 'original-*'`.
+- [x] Successful main Actions run is recorded before tagging. Commit `38c3a81` pushed to `main`;
+      run `29970690019` **completed / success** (`build in 43s`, "Test and package" green) **before**
+      the tag was created. Fail-closed rule honored: the run was watched to a completed success, not
+      tagged in-flight.
+- [x] Workflow permissions contain no broader access than the documented contract. Exactly
+      `permissions: contents: write` at the top level, no job-level escalation; the only token is
+      `GH_TOKEN: ${{ github.token }}` for `gh release`.
 
-## 9. Release
+## 9. Release — v0.3.0 published 2026-07-23
 
-- [ ] Semantic version matches the POM, plugin metadata, and `v<version>` tag.
-- [ ] Successful tag Actions run and GitHub release are recorded.
-- [ ] Release contains exactly one updater-matching JAR plus `SHA256SUMS.txt` and no `original-*` JAR.
-- [ ] Downloaded release assets pass `sha256sum --check SHA256SUMS.txt`.
+- [x] Semantic version matches the POM, plugin metadata, and `v<version>` tag. `pom.xml`
+      `<version>0.3.0</version>`; embedded `plugin.yml` `version: '0.3.0'` (Maven-filtered); annotated
+      tag `v0.3.0` on commit `38c3a81` — the same commit run `29970690019` verified green.
+- [x] Successful tag Actions run and GitHub release are recorded. Tag run `29970750451`
+      **completed / success** with "Upload tagged release assets"; release published (not draft, not
+      prerelease) at `github.com/carmelosantana/minecraft-ollama/releases/tag/v0.3.0` by
+      `github-actions[bot]`.
+- [x] Release contains exactly one updater-matching JAR plus `SHA256SUMS.txt` and no `original-*`
+      JAR. Assets: `ollama-0.3.0.jar` (1 match for `^ollama-[0-9].*\.jar$`) and `SHA256SUMS.txt`;
+      zero `original-*`.
+- [x] Downloaded release assets pass `sha256sum --check SHA256SUMS.txt`. Downloaded and checked:
+      `ollama-0.3.0.jar: OK`.
 
 ## 10. Updater
 
