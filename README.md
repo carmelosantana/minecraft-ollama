@@ -20,6 +20,12 @@ Project home: <https://xpfarm.org>
 - `/ollama chat` - Start an interactive chat session
 - `/ollama version` - Show plugin version and model info
 
+### 🦙 Llama Companion
+- `/llama recipe` - Show the crafting recipe (useful on Bedrock, where custom recipes are absent from the recipe book)
+- `/llama ask <message>` - Talk to your companion in chat
+- `/llama dismiss` - Send your companion back to its charm
+- `/llama give [player]` - Give a summon charm (op only)
+
 ### 🔧 Admin Commands
 - `/ollama status` - Show plugin and API status
 - `/ollama reload` - Reload configuration
@@ -32,6 +38,36 @@ Project home: <https://xpfarm.org>
 - Event-driven architecture
 - Context-aware responses using player activity logs
 - Async processing with callbacks
+
+## Llama Companion
+
+Craft a llama companion from vanilla ingredients and it follows you, survives being knocked out,
+and can hold a conversation.
+
+- **Craft it.** The recipe is white wool, lead, hay bale, and gold ingot — reachable in the first
+  hour or two, no nether trip. `/llama recipe` prints the shape. Place the summon charm and a llama
+  bound to you appears. One companion per player.
+- **It follows you.** Across chunk boundaries and through nether portals, teleporting to catch up if
+  it falls too far behind.
+- **It talks.** Right-click it to open a dialog, or use `/llama ask <message>`. It has its own
+  personality and can see **only your own** state — your inventory, armor, hands, health, biome,
+  dimension, and time of day. It never sees other players and never reads anyone's chat history. If
+  it suggests a command, that command appears as click-to-prefill text; the plugin never runs it.
+- **Downed, not dead.** At lethal damage it collapses and its summon charm returns to you instead of
+  dying for good. Void damage teleports it back to you. `/kill` still removes it for admins.
+- **It nudges you.** Deterministic, LLM-free reminders — a shield you're carrying but haven't
+  equipped, no food, a tool about to break, no torches. Instant, and it cannot make things up.
+
+**Conversation needs Ollama; everything else does not.** Crafting, following, downed recovery, and
+nudges work even with `enabled: false` or the endpoint unreachable — only the conversation feature
+degrades (the llama says it can't think right now). The companion is governed by its own
+`companion.enabled` switch, independent of the top-level Ollama `enabled` flag.
+
+**Bedrock note.** Custom recipes do not appear in the Bedrock recipe book, but hand-placing the
+ingredients still crafts the charm because the Java server resolves the recipe — `/llama recipe`
+mitigates the discoverability gap. The conversation dialog is a Paper Dialog that Geyser
+auto-converts to a Bedrock form (no Geyser, Floodgate, or Cumulus dependency). As everywhere on this
+server, ViaVersion is required for Bedrock connectivity.
 
 ## Quick Start
 

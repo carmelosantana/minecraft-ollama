@@ -310,19 +310,27 @@ General:
 
 - [x] Java 25/Paper 26.1.2 build 74 compile succeeds and `plugin.yml` uses `api-version: '26.1'`,
       matching the API compiled against. `mvn clean verify` → `BUILD SUCCESS`; the embedded
-      descriptor in `target/ollama-0.3.0.jar` reads `api-version: '26.1'` (quoted String, not the
-      old `'1.21'`). Compiled bytecode is `major version: 69` (Java 25) via `javap`.
+      descriptor in `target/ollama-0.4.0.jar` reads `api-version: '26.1'` (quoted String, not the
+      old `'1.21'`). The version-sensitive Paper Dialog API (`io.papermc.paper.registry.data.dialog.*`)
+      resolved and compiled cleanly against `paper-api 26.1.2` — no reconciliation against the
+      decompiled jar was needed.
 - [x] Hard dependencies, soft dependencies, optional APIs, and load ordering were reviewed and
       declared. No hard dependencies. `softdepend: [ViaVersion]` retained for load ordering. Apache
       HttpClient was removed as a bundled dependency (0 `org/apache/http` classes in the shaded
       JAR); Gson 2.14.0 remains, shade-relocated to `org.xpfarm.ollama.libs.gson` (230 classes).
-- [ ] Geyser/Floodgate/ViaVersion review covers Bedrock-safe input, UI, inventory, identity, and
-      protocol behavior. **Unchecked:** the review performed 2026-07-22 covers the *planned* 0.4.0
-      Bedrock surface (dialogs, interaction, recipes), and 0.3.0 ships none of it — 0.3.0 adds no
-      new player-facing or Bedrock-facing surface. Gate 4 ticks this when the 0.4.0 code exists and
-      matches. **The ViaVersion documentation fact this review established IS discharged by 0.3.0:**
-      `README.md` now documents ViaVersion as a hard runtime requirement, not an optional soft
-      dependency.
+- [x] Geyser/Floodgate/ViaVersion review covers Bedrock-safe input, UI, inventory, identity, and
+      protocol behavior. **0.4.0 ships the reviewed surface and the code matches the design.** Every
+      Bedrock finding from the 2026-07-22 review is honored in shipped code: entity listeners guard
+      `event.getHand() != EquipmentSlot.HAND` (the two-interact-packet reality —
+      `CompanionPlaceListener`, `CompanionInteractionListener`); the dialog text input sets
+      `maxLength(256)` explicitly rather than accepting Geyser's 32-char default (`CompanionDialog`);
+      the conversation UI is a Paper Dialog auto-converted by Geyser, with **no** Geyser/Floodgate/
+      Cumulus dependency (0 such classes shaded); the summon item's identity is a PDC tag on the
+      output only, so hand-crafting resolves server-side despite the Bedrock recipe-book gap; and
+      `/llama recipe` mitigates that gap. ViaVersion is documented as a hard runtime requirement in
+      `README.md`. **Client-side Bedrock rendering** (the dialog actually drawn as a Cumulus form, a
+      real Bedrock tap) was **not** exercised — gate 7a does no client joins — and is carried to the
+      gate-12 play-test obligation.
 
 **The Bedrock review the 0.2.1 backfill recorded as "NEVER PERFORMED" was performed on 2026-07-22**
 as part of gate 1 research, against Geyser and Floodgate sources at `master` and the decompiled
@@ -365,26 +373,37 @@ exists and matches. Three facts it established that bind implementation:
 ## 6. Tests and build
 
 - [x] Unit tests cover separable logic, configuration, serialization, permissions, and failure
-      paths. 67 tests, up from 12 at the 0.2.1 baseline: `StatusPolicyTest` (status→action mapping,
-      retry budget), `ChatRequestSerializationTest`/`GenerateRequestSerializationTest` (the
-      system-prompt fix, `think` gating, `format` as object, `done_reason`), `OllamaHttpTest`
-      (timeout, concurrency gate, retry, deadline, ungated metadata, malformed URI, no-leak),
-      `ModelCapabilitiesTest` (per-model cache, unknown-not-cached, 200-non-JSON),
-      `OllamaAPIThinkGatingThreadTest` (probe runs off the main thread), plus `OllamaAPITest` and
-      `PluginDescriptorTest`.
+      paths. **105 tests** (67 at the 0.3.0 baseline + 38 new for the companion), up from 12 at the
+      0.2.1 baseline. 0.3.0 surface: `StatusPolicyTest`, `ChatRequestSerializationTest`/
+      `GenerateRequestSerializationTest`, `OllamaHttpTest`, `ModelCapabilitiesTest`,
+      `OllamaAPIThinkGatingThreadTest`, `OllamaAPITest`, `PluginDescriptorTest` (now also asserting
+      the `llama` command and `ollama.llama.use`/`ollama.llama.give` permissions). Companion surface,
+      each testing the separable pure logic while Bukkit-wired shells are left to gate 7a:
+      `CompanionKeysTest`, `CompanionItemTest` (PDC read contract), `CompanionRecipeTest` (recipe
+      key), `CompanionRegistryTest` (bind/resolve incl. the null-resolution case), `CompanionEntityTest`
+      (downed-flag round-trip), `CompanionPlaceListenerTest` (the one-per-player decision),
+      `FollowTaskTest` (teleport-catch-up threshold), `DownedStateListenerTest` (the damage classifier
+      — KILL/VOID/lethal/block/ignore), `InventorySnapshotTest`, `InventoryAdvisorTest` (the four nudge
+      rules + enabled-set gating), `CompanionContextTest` (own-state-only rendering), `CommandSuggesterTest`
+      (parse-not-execute), `CompanionConversationTest` (system prompt as a leading `role:"system"`
+      message, never a top-level field), `NudgeTaskTest` (per-player cooldown boundary),
+      `LlamaCommandTest` (subcommand routing), `CompanionManagerConfigTest` (rule parsing).
 - [x] `PluginDescriptorTest` parses `plugin.yml` and `config.yml` with SnakeYAML and asserts
       `name`, `main`, a `String`-typed `api-version` (now `'26.1'`), a fully-substituted `version`
       (asserts no `${` survives), the `website`, every command, every permission, and the soft
       dependencies. It reads the Maven-filtered `target/classes/plugin.yml` in preference to source,
       so the `version` assertion *is* the filtering proof.
-- [x] `mvn --batch-mode --no-transfer-progress clean verify` succeeds. Final: `Tests run: 67,
-      Failures: 0, Errors: 0, Skipped: 0` → `BUILD SUCCESS`.
+- [x] `mvn --batch-mode --no-transfer-progress clean verify` succeeds. Final: `Tests run: 105,
+      Failures: 0, Errors: 0, Skipped: 0` → `BUILD SUCCESS` (0.4.0). (0.3.0 was 67.)
 - [x] The shaded releasable JAR and embedded `plugin.yml` were inspected; `original-*` JARs are
-      excluded. `unzip -p target/ollama-0.3.0.jar plugin.yml` shows `version: '0.3.0'` and
-      `api-version: '26.1'` fully substituted; 0 `org/apache/http` classes; 230 relocated Gson
-      classes. A `target/original-ollama-0.3.0.jar` exists as normal maven-shade output but is
-      excluded from the release by `.github/workflows/build.yml` (`! -name 'original-*'` in the
-      SHA256SUMS step, the upload-artifact glob, and the `gh release upload` find — verified).
+      excluded. `unzip -p target/ollama-0.4.0.jar plugin.yml` shows `version: '0.4.0'` and
+      `api-version: '26.1'` fully substituted, and declares the `llama` command with
+      `ollama.llama.use`/`ollama.llama.give`; **0** `org/apache/http` classes; 230 relocated Gson
+      classes under `org/xpfarm/ollama/libs/gson` (0 unrelocated `com/google/gson`); 26 companion
+      classes under `org/xpfarm/ollama/companion/` and the `llama-companion.md` personality resource
+      present. A `target/original-ollama-0.4.0.jar` exists as normal maven-shade output but is
+      excluded from the release by `.github/workflows/build.yml` (`! -name 'original-*'` — verified
+      at 0.3.0).
 
 ## 7. Matrix
 
@@ -446,6 +465,92 @@ stack with this repo's `scripts/extra-services.yml` Ollama sidecar.
   config default `llama3.2`, to keep the sidecar pull and generation fast. A thinking-capable model
   (which would exercise the `think: false` *positive* path) was not run — the omit-when-not-capable
   path was confirmed instead.
+
+**Gate 7a (0.4.0 companion) — runtime-verified 2026-07-22.** Booted via the shared rig
+(`scripts/test-stack.sh` → `xpfarm-test-stack`) on a fresh-volume Legendary stack with the
+`scripts/extra-services.yml` Ollama sidecar (auto-layered by the current rig — no `--with` flag).
+Paper self-verified `Done (19.194s)`, a real Minecraft handshake (`Paper 26.1.2 | protocol 775`),
+and RCON `plugins` listing all four **green**: `floodgate, Geyser-Spigot, Ollama, ViaVersion`. The
+`ollama-0.4.0.jar` under test was the shaded release JAR.
+
+> **Rig note (0.4.0).** This run's worktree basename `agent-a3a17506cba37acfa` is **dot-free**, so
+> the dotted-Compose-name limitation the 0.3.0 note records did not bite — the project name
+> `xpfarm-plugin-test-agent-a3a17506cba37acfa-91dbf402` was accepted directly. The limitation is
+> still real for dotted worktree names; it simply did not apply here.
+
+- [x] **The companion is decoupled from the Ollama master switch (acceptance check 17; plan Task 18
+      — the load-bearing change).** With the shipped default `enabled: false`, the log shows the API
+      staying dormant *and* the companion coming up anyway, verbatim:
+      `[Ollama] Ollama integration is disabled; no API client or listeners were started.` →
+      `[Ollama] Registered companion recipe ollama:companion_recipe` →
+      `[Ollama] Llama companion enabled (conversation dormant — Ollama disabled)`. Flipping
+      `enabled: true` (endpoint `http://ollama:11434`, model `llama3.2:1b`) and restarting, the same
+      line loses its suffix — `[Ollama] Llama companion enabled` — followed by
+      `[Ollama] ✅ Successfully connected to Ollama API` and `[Ollama] Preloaded Ollama model
+      llama3.2:1b`. Recipe registration and companion-subsystem enablement occur on both paths;
+      conversation is the only thing gated on the API, and it degrades rather than fails.
+- [x] **The `/llama` command surface is wired and the safety guards hold (plan Task 17), over RCON:**
+      `/llama recipe` → `Llama Companion recipe:  W L W (W=White Wool, L=Lead)  H G H (H=Hay Bale,
+      G=Gold Ingot)  W L W`; `/llama help` → the usage line; `/llama give` (console, no player) →
+      `Player not found.`; **`/llama ask hi there` (console) → `Only players can talk to a llama.`**
+      — the Player-guard is enforced and no command is executed; `/llama frobnicate` →
+      `Unknown subcommand. Try /llama help`.
+- [x] **The conversation-backing Ollama endpoint is functional end to end.** A real generation
+      completed against `llama3.2:1b` via the console-drivable `/ollama say` (the companion's
+      `/llama ask` uses the same backend but is Player-gated — see below): request logged with the
+      system prompt, response
+      `"In Minecraft, grass appears green in most biomes."` with `"done":true,"done_reason":"stop"`.
+      The sidecar's gin log independently confirms the plugin-container wire traffic (`172.30.0.3`):
+      `GET /api/version 200`, `POST /api/show 200` (capability probe), `POST /api/generate 200` (both
+      the enable-time preload at 8.5s and the interactive reply at 29.97s — the 1b model runs
+      ~0.45 tok/s on this CPU, so `api.timeout` was raised to 180 for the interactive call). Two
+      0.3.0 safety behaviors also reproduced **in vivo**: the concurrency gate rejected a second
+      in-flight request (`Ollama generate request failed: concurrency gate full (0 permits free)`)
+      and `api.timeout` fired at exactly 30s on the default (`timed out after 30s`, gin `500 |
+      30.00s`), the server staying up throughout.
+
+**Behaviors gate 7a could NOT reach for 0.4.0 (carried to the gate-12 play-test obligation):** every
+companion behavior that needs a real client join or a spawned entity is undriveable from the
+headless RCON console with no player online. Specifically **not** exercised in-game:
+
+- **Acceptance 9–10** — crafting the summon item on a real grid, and placing it to spawn a
+  bidirectionally-bound companion. (Recipe *registration* is confirmed above; a player crafting/
+  placing is not.)
+- **Acceptance 11** — follow across chunk boundaries and through a nether portal (needs a moving
+  player). Pure teleport-threshold logic is unit-tested (`FollowTaskTest`).
+- **Acceptance 12–14** — lethal damage → downed + charm return while `/kill` still kills; void
+  rescue; survive a restart and re-resolve by UUID (all need a spawned companion). The damage
+  classifier is unit-tested (`DownedStateListenerTest`).
+- **Acceptance 15** — the right-click dialog rendered on a Java client and as a Geyser/Cumulus form
+  on Bedrock (needs a client join). The dialog builds against the real `paper-api 26.1.2` Dialog API
+  — it **compiled verbatim**, no reconciliation needed — but was not drawn.
+- **Acceptance 16, 18** — the shield nudge and the per-player nudge cooldown in-game (need a player
+  with a companion). The rules and the cooldown boundary are unit-tested (`InventoryAdvisorTest`,
+  `NudgeTaskTest`).
+- **A real `/llama ask` reply in character** — the command guards `sender instanceof Player`, so it
+  cannot be driven from RCON even with Ollama up; the underlying backend is proven functional above
+  and the request assembly (system prompt as a leading `role:"system"` message, own-state-only
+  context) is unit-tested (`CompanionConversationTest`), but the in-game round-trip awaits a client.
+
+**Two deliberate deviations recorded (from the plan's Self-review):**
+
+1. **The companion keeps its own per-player conversation history**, a `Map<UUID,List<ChatMessage>>`
+   on `CompanionConversation`, rather than reusing the shared `ChatSessionManager` that `/ollama
+   chat` uses. Reason: the llama has a distinct personality system prompt, and interleaving its
+   turns with `/ollama chat` would blend two personas in one transcript. This departs from the
+   design doc's "reuses the `ChatSessionManager`" wording; the intent (a held conversation) is
+   preserved and the persona/privacy separation is improved.
+2. **The companion assembles its own bounded prompt context** (`InventorySnapshot` /
+   `CompanionContext`) instead of routing through `SystemPromptManager`, whose `fillContextVariables`
+   injects nearby players (50-block radius) and player activity logs — both out of the approved
+   own-state-only scope. The type shape (`InventorySnapshot` has no field for another player and no
+   chat history) enforces the privacy boundary structurally.
+
+A third, smaller reconciliation: the Task 8 portal-follow listener implements
+`PlayerChangedWorldEvent` only (the plan's prose also named `PlayerPortalEvent`, but the plan's own
+code block used only the former). A nether/end portal traversal *is* a world change, so the single
+handler covers the acceptance-11 portal case; `PlayerPortalEvent` fires before the destination
+resolves and would be the wrong hook. Left as implemented.
 
 ## 8. CI/CD
 
