@@ -1,5 +1,6 @@
 package org.xpfarm.ollama.companion;
 
+import java.util.Map;
 import java.util.UUID;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -11,6 +12,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 
 /**
@@ -86,7 +88,11 @@ public final class DownedStateListener implements Listener {
         Player owner = Bukkit.getPlayer(ownerId);
         if (owner != null) {
             registry.unbind(owner);
-            owner.getInventory().addItem(item.create(1));
+            Map<Integer, ItemStack> leftover = owner.getInventory().addItem(item.create(1));
+            if (!leftover.isEmpty()) {
+                leftover.values().forEach(drop ->
+                        owner.getWorld().dropItemNaturally(owner.getLocation(), drop));
+            }
             owner.sendMessage(Component.text("Your llama was downed — its charm returns to you.",
                     NamedTextColor.RED));
         }

@@ -1,6 +1,7 @@
 package org.xpfarm.ollama.companion;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -14,6 +15,7 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Llama;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 
 /** /llama ask|recipe|dismiss|give. Never executes suggested commands; give is op-gated. */
@@ -82,7 +84,11 @@ public final class LlamaCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage(Component.text("Player not found.", NamedTextColor.RED));
                     return true;
                 }
-                target.getInventory().addItem(item.create(1));
+                Map<Integer, ItemStack> leftover = target.getInventory().addItem(item.create(1));
+                if (!leftover.isEmpty()) {
+                    leftover.values().forEach(drop ->
+                            target.getWorld().dropItemNaturally(target.getLocation(), drop));
+                }
                 sender.sendMessage(Component.text("Gave a companion charm to " + target.getName(), NamedTextColor.GREEN));
             }
             case HELP -> sender.sendMessage(Component.text(
@@ -103,7 +109,11 @@ public final class LlamaCommand implements CommandExecutor, TabCompleter {
             registry.unbind(player);
         }
         conversation.forget(player);
-        player.getInventory().addItem(item.create(1));
+        Map<Integer, ItemStack> leftover = player.getInventory().addItem(item.create(1));
+        if (!leftover.isEmpty()) {
+            leftover.values().forEach(drop ->
+                    player.getWorld().dropItemNaturally(player.getLocation(), drop));
+        }
         player.sendMessage(Component.text("Your llama returns to its charm.", NamedTextColor.AQUA));
     }
 
