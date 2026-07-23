@@ -567,7 +567,14 @@ resolves and would be the wrong hook. Left as implemented.
       `permissions: contents: write` at the top level, no job-level escalation; the only token is
       `GH_TOKEN: ${{ github.token }}` for `gh release`.
 
-## 9. Release — v0.3.0 published 2026-07-23
+**v0.4.0 (2026-07-23):** merge commit `6a24353` pushed to `main`; run `29975140651`
+**completed / success** and watched to completion **before** the tag was created (fail-closed rule
+honored). Same workflow, same `contents: write`-only permission. The merged tree was independently
+re-verified locally before the push: `Tests run: 105, Failures: 0` → `BUILD SUCCESS`, and the shaded
+`ollama-0.4.0.jar` embeds `version: '0.4.0'` / `api-version: '26.1'`, the `llama` command, 0
+`org/apache/http` classes, 230 relocated Gson classes, 26 companion classes, and `llama-companion.md`.
+
+## 9. Release — v0.3.0 and v0.4.0 published 2026-07-23
 
 - [x] Semantic version matches the POM, plugin metadata, and `v<version>` tag. `pom.xml`
       `<version>0.3.0</version>`; embedded `plugin.yml` `version: '0.3.0'` (Maven-filtered); annotated
@@ -582,7 +589,23 @@ resolves and would be the wrong hook. Left as implemented.
 - [x] Downloaded release assets pass `sha256sum --check SHA256SUMS.txt`. Downloaded and checked:
       `ollama-0.3.0.jar: OK`.
 
+**v0.4.0 (2026-07-23):** `pom.xml` and embedded `plugin.yml` both `0.4.0`; annotated tag `v0.4.0`
+on `6a24353` — the same commit run `29975140651` verified green. Tag run `29975183155`
+**completed / success** with "Upload tagged release assets"; release published (not draft, not
+prerelease) at `github.com/carmelosantana/minecraft-ollama/releases/tag/v0.4.0`. Assets:
+`ollama-0.4.0.jar` (1 match for `^ollama-[0-9].*\.jar$`) + `SHA256SUMS.txt`, zero `original-*`;
+`sha256sum --check` → `ollama-0.4.0.jar: OK`.
+
 ## 10. Updater
+
+**No manifest change required for v0.3.0 or v0.4.0.** The existing entry in
+`minecraft-plugin-updater/plugins.json` is `destination: ollama.jar`, `asset_regex:
+^ollama-[0-9].*\.jar$` — which matches both `ollama-0.3.0.jar` and `ollama-0.4.0.jar` — and neither
+release changed the `artifactId`, JAR name, or updater destination. The plugin is enrolled,
+unpinned, and enabled, so both releases are picked up automatically on the next production
+recreation. The dry-run behavior boxes below were **not** re-run this cycle (no manifest change to
+validate); they remain as last exercised. Full `minecraft-plugin-updater` gate-10 work is only
+triggered by a manifest edit.
 
 - [ ] Updater manifest/tests cover repository, destination, anchored asset regex, legacy globs, enabled state, and optional pin.
 - [ ] Fresh install, upgrade, no-op, legacy archival, endpoint failure, and checksum failure behaviors pass.
